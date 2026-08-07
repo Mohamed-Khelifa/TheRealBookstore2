@@ -1,7 +1,7 @@
 // Meta Pixel and Conversions API (CAPI) Integration Engine
 // Pixel ID: 2124874741697456
 
-export const DEFAULT_PIXEL_ID = '4261930954059397';
+export const DEFAULT_PIXEL_ID = '2124874741697456';
 
 export function getCookie(name: string): string | null {
   if (typeof document === 'undefined') return null;

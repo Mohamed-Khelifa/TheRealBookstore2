@@ -191,7 +191,7 @@ export default function ManageMetaPixel() {
                   type="text"
                   value={pixelId}
                   onChange={(e) => setPixelId(e.target.value)}
-                  placeholder="e.g. 4261930954059397"
+                  placeholder="e.g. 2124874741697456"
                   required
                   className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-white focus:outline-none focus:border-primary text-sm font-mono"
                 />

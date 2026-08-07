@@ -38,7 +38,7 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Missing event_name in request body' });
     }
 
-    let pixelId = getEnv('META_PIXEL_ID') || getEnv('VITE_META_PIXEL_ID') || '4261930954059397';
+    let pixelId = getEnv('META_PIXEL_ID') || getEnv('VITE_META_PIXEL_ID') || '2124874741697456';
     let accessToken = getEnv('META_CAPI_TOKEN') || getEnv('META_ACCESS_TOKEN') || 'EAASpkZAwXaZAkBSG8sdxGMxmVL9K47lqtZC6ZATcN0iUHx8xzIB2RPOsopUe2h47PpZAMEkJOkZAc5imjKEYCzRciicX71g4ftIZBJxzRLFZBXgckzQ48qBVE4fRz7JeXkgdBvbWZCkSK3toZAAdI98CHtew3A5pyU1waidAsubHBhVykAqPZCGMrZBxgEcQhzrXjxT2vgZDZD';
     let testEventCode = getEnv('META_TEST_EVENT_CODE') || '';
 
