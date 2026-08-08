@@ -18,6 +18,7 @@ import { notifyDeliveredOrder } from '../lib/notifications';
 import wilayaList from '../../public/wilaya_list.json';
 import ManageAnalytics from "./ManageAnalytics";
 import ManageMetaPixel from "./ManageMetaPixel";
+import ManageWhatsApp, { DEFAULT_WHATSAPP_TEMPLATE } from "./ManageWhatsApp";
 import LiveDeliveryFeed from "./LiveDeliveryFeed";
 import { ECONOMIC_RATES, getEconomicRate } from '../data/shippingRates';
 
@@ -160,6 +161,10 @@ export default function AdminDashboard({ user }: { user: User | null }) {
             <Zap className="w-5 h-5 text-amber-400" />
             <span className="font-bold text-sm">Meta Pixel & CAPI</span>
           </Link>
+          <Link to="/admin/whatsapp" className={`flex items-center space-x-3 p-3 rounded-2xl transition-all duration-300 ${location.pathname.startsWith('/admin/whatsapp') ? 'bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.3)]' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
+            <MessageSquare className="w-5 h-5 text-emerald-400" />
+            <span className="font-bold text-sm">WhatsApp Msg</span>
+          </Link>
           
           <div className="pt-4 mt-4 border-t border-white/10">
             <Link to="/" className="flex items-center space-x-3 p-3 rounded-2xl text-white/40 hover:bg-white/5 hover:text-white transition-all group">
@@ -189,6 +194,7 @@ export default function AdminDashboard({ user }: { user: User | null }) {
           <Route path="/loyalty" element={<ManageLoyalty />} />
           <Route path="/screenshots" element={<ManageScreenshots />} />
           <Route path="/meta-pixel" element={<ManageMetaPixel />} />
+          <Route path="/whatsapp" element={<ManageWhatsApp />} />
         </Routes>
       </main>
     </div>
@@ -754,6 +760,8 @@ function ManageOrders() {
   const [guepexParcels, setGuepexParcels] = useState<Record<string, any>>({});
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
 
+  const [waTemplate, setWaTemplate] = useState<string>(DEFAULT_WHATSAPP_TEMPLATE);
+
   const [sentWaOrders, setSentWaOrders] = useState<Record<string, boolean>>(() => {
     try {
       const saved = localStorage.getItem('wa_sent_orders');
@@ -776,19 +784,11 @@ function ManageOrders() {
       
     const totalPrice = order?.total_price ? `${Number(order.total_price).toFixed(0)} DA` : 'N/A';
 
-    const message = `Good evening${customerName} ^^
-This is BigDealBookstore i am reaching out to confirm your order via messages :D
-Ordered Books:
-${booksList}
-Total Price: ${totalPrice}
-if you want to officially confirm the order just say "confirm" and it will reach you this Thursday inshallah, in case you have any questions regarding your order or if you will not be able to receive your books for some reason just reach out through here and we will try to find a solution HAVE A GREAT EVENING!
-
-Bonsoir${customerName} ^^
-C'est BigDealBookstore, je vous contacte pour confirmer votre commande par message :D
-Livres commandés :
-${booksList}
-Prix total : ${totalPrice}
-Si vous souhaitez confirmer officiellement la commande, dites simplement « confirmer » et elle vous parviendra ce jeudi incha'Allah. Si vous avez la moindre question concernant votre commande ou si vous ne pouvez pas recevoir vos livres pour une raison quelconque, écrivez-nous ici et nous trouverons une solution PASSEZ UNE EXCELLENTE SOIRÉE !`;
+    let message = waTemplate || DEFAULT_WHATSAPP_TEMPLATE;
+    message = message
+      .replace(/{{customerName}}/g, customerName)
+      .replace(/{{booksList}}/g, booksList)
+      .replace(/{{totalPrice}}/g, totalPrice);
 
     return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
   };
@@ -831,11 +831,18 @@ Si vous souhaitez confirmer officiellement la commande, dites simplement « conf
       }
 
       try {
-        const { data: settingsData } = await supabase.from('site_settings').select('value').eq('key', 'inventory_books').single();
-        if (settingsData && settingsData.value) {
-          try {
-            setInventoryIds(JSON.parse(settingsData.value));
-          } catch(e) {}
+        const { data: settingsData } = await supabase.from('site_settings').select('key, value').in('key', ['inventory_books', 'whatsapp_template']);
+        if (settingsData) {
+          const inv = settingsData.find(s => s.key === 'inventory_books');
+          if (inv && inv.value) {
+            try {
+              setInventoryIds(JSON.parse(inv.value));
+            } catch(e) {}
+          }
+          const wa = settingsData.find(s => s.key === 'whatsapp_template');
+          if (wa && wa.value) {
+            setWaTemplate(wa.value);
+          }
         }
       } catch (e) {
         // ignore missing inventory settings
