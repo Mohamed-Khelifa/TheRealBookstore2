@@ -4,6 +4,7 @@ import path from "path";
 import { PDFDocument } from "pdf-lib";
 import metaCapiHandler from "./api/meta-capi.js";
 import guepexWebhookHandler from "./api/guepex-webhook.js";
+import { syncGuepexOrders } from "./api/cron-guepex.js";
 
 const WILAYA_CODES: Record<string, number> = {
   "Adrar": 1, "Chlef": 2, "Laghouat": 3, "Oum El Bouaghi": 4, "Batna": 5, "Béjaïa": 6, "Biskra": 7, "Béchar": 8, "Blida": 9, "Bouira": 10,
@@ -94,6 +95,10 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Start background sync
+  syncGuepexOrders();
+  setInterval(syncGuepexOrders, 5 * 60 * 1000); // Every 5 minutes
+
   app.use(express.json({
     verify: (req: any, res, buf) => {
       req.rawBody = buf.toString('utf8');
@@ -168,31 +173,22 @@ async function startServer() {
         }
       }
 
-      let currentPage = null;
-      let idx = 0;
+      // 100mm x 150mm in points (72 DPI)
+      const LABEL_WIDTH = 283.465; // 100mm
+      const LABEL_HEIGHT = 425.197; // 150mm
 
       for (const embed of pagesToEmbed) {
-        if (idx % 4 === 0) {
-          currentPage = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT]);
-        }
+        const currentPage = mergedPdf.addPage([LABEL_WIDTH, LABEL_HEIGHT]);
         
-        const pos = idx % 4;
-        // pos 0: top-left
-        // pos 1: top-right
-        // pos 2: bottom-left
-        // pos 3: bottom-right
-        
-        const x = (pos % 2 === 0) ? 0 : A4_WIDTH / 2;
-        const y = (pos < 2) ? A4_HEIGHT / 2 : 0;
+        const scaleX = LABEL_WIDTH / (A4_WIDTH / 2);
+        const scaleY = LABEL_HEIGHT / (A4_HEIGHT / 2);
         
         currentPage.drawPage(embed, {
-          x,
-          y,
-          xScale: 1,
-          yScale: 1
+          x: 0,
+          y: 0,
+          xScale: scaleX,
+          yScale: scaleY
         });
-        
-        idx++;
       }
 
       const mergedPdfBytes = await mergedPdf.save();
@@ -354,7 +350,7 @@ async function startServer() {
         do_insurance: true,
         declared_value: Number(price),
         is_oversized: false,
-        freeshipping: false,
+        freeshipping: true,
         is_stopdesk: Boolean(is_stopdesk || stopdesk_id),
         economic: 1,
         ...(stopdesk_id && { stopdesk_id: Number(stopdesk_id) }),

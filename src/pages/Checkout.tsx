@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Trash2, Plus, Minus, CreditCard, Truck, MapPin, User, CheckCircle, ShoppingCart, Sparkles, Copy, MessageSquare, Trophy, Gift, Instagram, Facebook } from 'lucide-react';
+import { Trash2, Plus, Minus, CreditCard, Truck, MapPin, User, CheckCircle, ShoppingCart, Sparkles, Copy, MessageSquare, Trophy, Gift, Instagram, Facebook, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
 import { useCart } from '../store/useCart';
@@ -1106,6 +1106,13 @@ export default function Checkout() {
                 <p className="font-bold text-white">Office Pickup</p>
                 <p className="text-xs text-white/40">Pick up from our nearest office</p>
               </button>
+            </div>
+            
+            <div className="flex items-start gap-3 mt-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+              <Info className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-200/80 leading-relaxed">
+                <strong>Tip from us:</strong> We personally advise choosing <strong>Office Pickup</strong> if possible. It's often faster and more reliable, as coordinating with delivery drivers can sometimes be tricky!
+              </p>
             </div>
           </section>
 
