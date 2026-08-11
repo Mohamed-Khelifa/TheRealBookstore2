@@ -1,6 +1,10 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
+import https from "https";
+import http from "http";
+import http2 from "http2";
+import { URL } from "url";
 import { PDFDocument } from "pdf-lib";
 import metaCapiHandler from "./api/meta-capi.js";
 import guepexWebhookHandler from "./api/guepex-webhook.js";
@@ -133,73 +137,6 @@ async function startServer() {
   });
 
   app.all("/api/meta-capi", metaCapiHandler);
-
-  app.post("/api/merge-pdf-labels", async (req, res) => {
-    try {
-      const { urls } = req.body;
-      if (!urls || !Array.isArray(urls) || urls.length === 0) {
-        return res.status(400).json({ error: "Missing or invalid urls array" });
-      }
-
-      const A4_WIDTH = 595.276;
-      const A4_HEIGHT = 841.89;
-
-      const mergedPdf = await PDFDocument.create();
-      const pagesToEmbed = [];
-
-      for (const url of urls) {
-        try {
-          const response = await fetch(url, { redirect: "manual" });
-          if (!response.ok && response.status !== 302) {
-            console.error(`Failed to fetch PDF from ${url}: ${response.status} ${response.statusText}`);
-            continue;
-          }
-          const pdfBytes = await response.arrayBuffer();
-          const pdfDoc = await PDFDocument.load(pdfBytes);
-          const pageToEmbed = pdfDoc.getPages()[0];
-          
-          // Guepex single labels are A4, with the label in the top-left quadrant.
-          // Extract only that quadrant to tile perfectly.
-          const embeddedPage = await mergedPdf.embedPage(pageToEmbed, {
-            left: 0,
-            right: A4_WIDTH / 2,
-            bottom: A4_HEIGHT / 2,
-            top: A4_HEIGHT
-          });
-          
-          pagesToEmbed.push(embeddedPage);
-        } catch (err) {
-          console.error(`Error loading PDF from ${url}:`, err);
-        }
-      }
-
-      // 100mm x 150mm in points (72 DPI)
-      const LABEL_WIDTH = 283.465; // 100mm
-      const LABEL_HEIGHT = 425.197; // 150mm
-
-      for (const embed of pagesToEmbed) {
-        const currentPage = mergedPdf.addPage([LABEL_WIDTH, LABEL_HEIGHT]);
-        
-        const scaleX = LABEL_WIDTH / (A4_WIDTH / 2);
-        const scaleY = LABEL_HEIGHT / (A4_HEIGHT / 2);
-        
-        currentPage.drawPage(embed, {
-          x: 0,
-          y: 0,
-          xScale: scaleX,
-          yScale: scaleY
-        });
-      }
-
-      const mergedPdfBytes = await mergedPdf.save();
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", "inline; filename=merged-labels.pdf");
-      return res.send(Buffer.from(mergedPdfBytes));
-    } catch (error: any) {
-      console.error("Error merging PDFs:", error);
-      return res.status(500).json({ error: "Internal server error", details: error.message });
-    }
-  });
 
   app.get("/api/guepex-centers", async (req, res) => {
     try {
@@ -624,6 +561,91 @@ async function startServer() {
     } catch (error: any) {
       console.error("Error sending delivered notification:", error);
       return res.status(500).json({ error: "Internal server error", details: error.message });
+    }
+  });
+
+  app.post("/api/merge-pdf-labels", async (req, res) => {
+    try {
+      const { trackingCodes } = req.body;
+      if (!trackingCodes || !Array.isArray(trackingCodes) || trackingCodes.length === 0) {
+        return res.status(400).json({ error: "Missing trackingCodes array" });
+      }
+      
+      const outDoc = await PDFDocument.create();
+      const A6_WIDTH = 297.64;
+      const A6_HEIGHT = 419.53;
+
+      for (const tracking of trackingCodes) {
+        try {
+          const urlStr = `https://guepex.app/app/bordereau.php?tracking=${tracking}`;
+          const parsed = new URL(urlStr);
+          
+          const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
+            const client = http2.connect(parsed.origin);
+            client.on("error", (err) => reject(err));
+            
+            const req = client.request({
+              ":path": parsed.pathname + parsed.search,
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept": "application/pdf, text/html, */*"
+            });
+            
+            let isResolved = false;
+            const timeout = setTimeout(() => {
+               if (!isResolved) {
+                 req.close();
+                 client.close();
+                 reject(new Error("Timeout fetching PDF from Guepex"));
+               }
+            }, 10000);
+
+            const chunks: Buffer[] = [];
+            req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+            req.on("end", () => {
+              isResolved = true;
+              clearTimeout(timeout);
+              client.close();
+              resolve(Buffer.concat(chunks));
+            });
+            req.end();
+          });
+          
+          if (pdfBuffer.length < 1000) {
+            console.error(`PDF too small for ${tracking}, might be an error page or 403.`);
+            continue;
+          }
+
+          const srcDoc = await PDFDocument.load(pdfBuffer);
+          const srcPages = srcDoc.getPages();
+          
+          for (let i = 0; i < srcPages.length; i++) {
+            const srcPage = srcPages[i];
+            const { width, height } = srcPage.getSize();
+            
+            const outPage = outDoc.addPage([A6_WIDTH, A6_HEIGHT]);
+            const embedded = await outDoc.embedPage(srcPage);
+            
+            outPage.drawPage(embedded, {
+              x: 0,
+              y: A6_HEIGHT - height,
+              width: width,
+              height: height
+            });
+          }
+        } catch (err: any) {
+          console.error(`Failed to process label for ${tracking}:`, err.message);
+        }
+      }
+      
+      const mergedPdfBytes = await outDoc.save();
+      
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", 'inline; filename="merged_labels_a6.pdf"');
+      return res.send(Buffer.from(mergedPdfBytes));
+      
+    } catch (e: any) {
+      console.error("Merge PDF error:", e);
+      return res.status(500).json({ error: e.message });
     }
   });
 

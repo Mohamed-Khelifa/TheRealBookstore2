@@ -1363,49 +1363,68 @@ function ManageOrders() {
       ? filteredOrders.filter(o => selectedOrderIds.has(o.id))
       : filteredOrders;
 
-    if (!ordersToPrint.length) return;
+    if (!ordersToPrint || ordersToPrint.length === 0) {
+      setStatusMsg({ type: 'error', text: 'No orders available to print.' });
+      return;
+    }
 
-    const labelUrls = ordersToPrint
-      .map(o => guepexParcels[o.id]?.label)
+    const trackings = ordersToPrint
+      .map(o => guepexParcels[o.id]?.tracking)
       .filter(Boolean);
 
-    if (labelUrls.length === 0) {
-      setStatusMsg({ type: 'error', text: 'No printed labels available for selected orders.' });
+    if (trackings.length === 0) {
+      setStatusMsg({ type: 'error', text: 'No Guepex tracking codes found for the selected orders. Please create shipping parcels first.' });
       return;
     }
 
-    setStatusMsg({ type: 'success', text: `Generating 4-in-1 labels for ${labelUrls.length} orders...` });
-
-    // Open window synchronously to avoid pop-up blockers
-    const newWindow = window.open('', '_blank');
-    if (!newWindow) {
-      setStatusMsg({ type: 'error', text: 'Pop-up blocked. Please allow pop-ups to print.' });
-      return;
-    }
+    setStatusMsg({ type: 'success', text: `Generating A6 official labels for ${trackings.length} order(s)... This might take a moment.` });
     
-    newWindow.document.write('<html><body style="font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f9fafb; color: #111;"><h2>Generating your labels, please wait...</h2></body></html>');
-    newWindow.document.title = "Generating Labels...";
-
     try {
       const response = await fetch('/api/merge-pdf-labels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls: labelUrls })
+        body: JSON.stringify({ trackingCodes: trackings })
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to merge PDFs');
-      }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
       
-      newWindow.location.href = url;
-      setStatusMsg({ type: 'success', text: `Generated ${labelUrls.length} labels in 4-in-1 format.` });
-    } catch (err: any) {
-      console.error('Error merging labels:', err);
-      newWindow.close();
-      setStatusMsg({ type: 'error', text: err.message || 'Failed to merge labels' });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      
+      if (win) {
+        setStatusMsg({ type: 'success', text: `Successfully generated A6 official labels for ${trackings.length} order(s).` });
+      } else {
+        setStatusMsg({ type: 'error', text: 'Pop-up blocked. Please allow pop-ups for this site to view the labels.' });
+      }
+    } catch (e: any) {
+      console.error(e);
+      setStatusMsg({ type: 'error', text: 'Failed to generate labels: ' + e.message });
+    }
+  };
+
+  const printSingleLabel = async (tracking: string) => {
+    setStatusMsg({ type: 'success', text: `Generating A6 official label for ${tracking}...` });
+    try {
+      const response = await fetch('/api/merge-pdf-labels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trackingCodes: [tracking] })
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      if (win) {
+        setStatusMsg({ type: 'success', text: `Successfully generated A6 official label for ${tracking}.` });
+      } else {
+        setStatusMsg({ type: 'error', text: 'Pop-up blocked. Please allow pop-ups to view the label.' });
+      }
+    } catch (e: any) {
+      console.error(e);
+      setStatusMsg({ type: 'error', text: 'Failed to generate label: ' + e.message });
     }
   };
 
@@ -1623,7 +1642,19 @@ function ManageOrders() {
                       <div className={`mt-3 inline-flex items-center space-x-2 px-3 py-1.5 rounded-lg border ${boxClass}`}>
                         <Truck className={`w-3.5 h-3.5 ${iconClass}`} />
                         <span className={`text-xs font-bold uppercase tracking-wider ${iconClass}`}>{guepexParcels[order.id].last_status || 'UNKNOWN'}</span>
-                        <a href={guepexParcels[order.id].label} target="_blank" rel="noreferrer" className="text-[10px] text-white/60 hover:text-white underline ml-2">Print Label</a>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (guepexParcels[order.id]?.tracking) {
+                              printSingleLabel(guepexParcels[order.id].tracking);
+                            }
+                          }}
+                          className="text-[10px] text-indigo-300 hover:text-white underline ml-2 font-bold cursor-pointer inline-flex items-center gap-1"
+                          title="Generate official Guepex A6 label"
+                        >
+                          <Printer className="w-3 h-3" />
+                          <span>Print Label</span>
+                        </button>
                       </div>
                     );
                   })() : (
@@ -1950,6 +1981,7 @@ function ManageOrders() {
           )}
         </div>
       )}
+
     </div>
   );
 }
