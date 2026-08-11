@@ -1380,10 +1380,10 @@ function ManageOrders() {
     setStatusMsg({ type: 'success', text: `Generating A6 official labels for ${trackings.length} order(s)... This might take a moment.` });
     
     try {
-      const response = await fetch('/api/merge-pdf-labels', {
+      const response = await fetch('/api/guepex-parcels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trackingCodes: trackings })
+        body: JSON.stringify({ action: 'merge-labels', trackingCodes: trackings })
       });
       
       if (!response.ok) {
@@ -1408,10 +1408,10 @@ function ManageOrders() {
   const printSingleLabel = async (tracking: string) => {
     setStatusMsg({ type: 'success', text: `Generating A6 official label for ${tracking}...` });
     try {
-      const response = await fetch('/api/merge-pdf-labels', {
+      const response = await fetch('/api/guepex-parcels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trackingCodes: [tracking] })
+        body: JSON.stringify({ action: 'merge-labels', trackingCodes: [tracking] })
       });
       if (!response.ok) throw new Error(await response.text());
       const blob = await response.blob();
