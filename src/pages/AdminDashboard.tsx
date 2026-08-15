@@ -1672,7 +1672,7 @@ function ManageOrders() {
                              address: `${order.wilaya}, ${order.baladia}`,
                              to_commune_name: order.baladia,
                              to_wilaya_name: order.wilaya,
-                             price: order.total_price || 0,
+                             price: order.items.reduce((sum: number, item: any) => sum + ((item.price || 0) * (item.qty || 1)), 0),
                              product_list: order.items.map((i:any) => `${i.qty}x ${i.title}`).join(', '),
                              is_stopdesk: order.shipping_method === 'office',
                              stopdesk_id: null // Will be auto-resolved in backend
