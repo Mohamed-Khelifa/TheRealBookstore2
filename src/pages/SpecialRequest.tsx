@@ -46,11 +46,11 @@ export default function SpecialRequest() {
 
         if (wc) {
           const parsedWc = typeof wc.value === 'string' ? JSON.parse(wc.value) : wc.value;
-          if (parsedWc && Object.keys(parsedWc).length >= 10) setAllWilayaCommunes(parsedWc);
+          if (parsedWc && typeof parsedWc === 'object') setAllWilayaCommunes({ ...DEFAULT_WILAYA_COMMUNES, ...parsedWc });
         }
         if (sc) {
           const parsedSc = typeof sc.value === 'string' ? JSON.parse(sc.value) : sc.value;
-          if (parsedSc && Object.keys(parsedSc).length >= 10) setAllStopdeskCommunes(parsedSc);
+          if (parsedSc && typeof parsedSc === 'object') setAllStopdeskCommunes({ ...DEFAULT_STOPDESK_COMMUNES, ...parsedSc });
         }
       }
     };

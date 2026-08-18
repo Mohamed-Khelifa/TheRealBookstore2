@@ -162,15 +162,21 @@ export default function Checkout() {
         
         if (wc) {
           const parsedWc = typeof wc.value === 'string' ? JSON.parse(wc.value) : wc.value;
-          if (parsedWc && Object.keys(parsedWc).length >= 10) setAllWilayaCommunes(parsedWc);
+          if (parsedWc && typeof parsedWc === 'object') {
+            setAllWilayaCommunes({ ...DEFAULT_WILAYA_COMMUNES, ...parsedWc });
+          }
         }
         if (sc) {
           const parsedSc = typeof sc.value === 'string' ? JSON.parse(sc.value) : sc.value;
-          if (parsedSc && Object.keys(parsedSc).length >= 10) setAllStopdeskCommunes(parsedSc);
+          if (parsedSc && typeof parsedSc === 'object') {
+            setAllStopdeskCommunes({ ...DEFAULT_STOPDESK_COMMUNES, ...parsedSc });
+          }
         }
         if (ga) {
           const parsedGa = typeof ga.value === 'string' ? JSON.parse(ga.value) : ga.value;
-          if (parsedGa && Object.keys(parsedGa).length >= 5) setAllGuepexAgencies(parsedGa);
+          if (parsedGa && typeof parsedGa === 'object') {
+            setAllGuepexAgencies({ ...DEFAULT_GUEPEX_AGENCIES, ...parsedGa });
+          }
         }
 
         const noteSetting = settingsData.find(s => s.key === 'checkout_cover_note');
@@ -494,7 +500,7 @@ export default function Checkout() {
               address: `${formData.wilaya}, ${formData.baladia}`,
               to_commune_name: formData.baladia,
               to_wilaya_name: formData.wilaya,
-              price: subtotalVal < 10000 ? Math.max(0, subtotalVal - discountAmount - loyaltyDiscount) : Math.max(0, subtotalVal - discountAmount - loyaltyDiscount - shippingCost),
+              price: safeTotal,
               product_list: items.map(i => `${i.qty}x ${i.title}`).join(', '),
               is_stopdesk: formData.shipping_method === 'office',
               stopdesk_id: formData.shipping_method === 'office' && formData.agency ? parseInt(formData.agency) : null

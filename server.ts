@@ -1,3 +1,5 @@
+import dns from 'node:dns';
+dns.setDefaultResultOrder('ipv4first');
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
@@ -8,7 +10,7 @@ import { URL } from "url";
 import { PDFDocument } from "pdf-lib";
 import metaCapiHandler from "./api/meta-capi.js";
 import guepexWebhookHandler from "./api/guepex-webhook.js";
-import { syncGuepexOrders } from "./api/cron-guepex.js";
+import { syncGuepexOrders } from "./src/server-utils/cron-guepex.js";
 
 const WILAYA_CODES: Record<string, number> = {
   "Adrar": 1, "Chlef": 2, "Laghouat": 3, "Oum El Bouaghi": 4, "Batna": 5, "Béjaïa": 6, "Biskra": 7, "Béchar": 8, "Blida": 9, "Bouira": 10,
@@ -112,7 +114,37 @@ async function startServer() {
 
   app.all("/api/guepex-webhook", guepexWebhookHandler);
 
-  app.get("/api/health", (req, res) => {
+  
+app.get("/api/guepex/locations", async (req, res) => {
+  try {
+    const api_id = process.env.GUEPEX_API_ID;
+    const api_token = process.env.GUEPEX_API_TOKEN;
+    if (!api_id || !api_token) {
+      return res.status(500).json({ error: "GUEPEX credentials are not configured" });
+    }
+
+    const headers = { "X-API-ID": api_id, "X-API-TOKEN": api_token };
+
+    // Fetch communes
+    const communesRes = await fetch("https://api.guepex.app/v1/communes/?page_size=2000", { headers });
+    const communesData = await communesRes.json().catch(() => null);
+
+    // Fetch centers
+    const centersRes = await fetch("https://api.guepex.app/v1/centers/?page_size=500", { headers });
+    const centersData = await centersRes.json().catch(() => null);
+
+    return res.status(200).json({
+      success: true,
+      communes: communesData?.data || [],
+      centers: centersData?.data || []
+    });
+  } catch (e: any) {
+    console.error(e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/health", (req, res) => {
     res.json({ status: "ok", message: "BigDealBookstore API is running" });
   });
 
@@ -138,49 +170,64 @@ async function startServer() {
 
   app.all("/api/meta-capi", metaCapiHandler);
 
-  app.get("/api/guepex-centers", async (req, res) => {
+  app.post("/api/admin/sync-locations", async (req, res) => {
     try {
-      const wilaya_name = req.query.wilaya_name as string;
-      if (!wilaya_name) {
-        return res.status(400).json({ error: "Missing wilaya_name" });
+      const { adminCode } = req.body;
+      const ADMIN_ACCESS_CODE = process.env.ADMIN_ACCESS_CODE || '314159';
+      if (adminCode !== ADMIN_ACCESS_CODE) {
+        return res.status(401).json({ success: false, message: "Invalid admin credentials" });
       }
 
-      const wilaya_id = WILAYA_CODES[wilaya_name];
-      if (!wilaya_id) {
-        return res.status(400).json({ error: "Invalid wilaya_name" });
-      }
+      const WILAYA_CODES: Record<string, number> = {
+        "Adrar": 1, "Chlef": 2, "Laghouat": 3, "Oum El Bouaghi": 4, "Batna": 5,
+        "Béjaïa": 6, "Biskra": 7, "Béchar": 8, "Blida": 9, "Bouira": 10,
+        "Tamanrasset": 11, "Tébessa": 12, "Tlemcen": 13, "Tiaret": 14, "Tizi Ouzou": 15,
+        "Alger": 16, "Djelfa": 17, "Jijel": 18, "Sétif": 19, "Saïda": 20,
+        "Skikda": 21, "Sidi Bel Abbès": 22, "Annaba": 23, "Guelma": 24, "Constantine": 25,
+        "Médéa": 26, "Mostaganem": 27, "M'Sila": 28, "Mascara": 29, "Ouargla": 30,
+        "Oran": 31, "El Bayadh": 32, "Illizi": 33, "Bordj Bou Arreridj": 34, "Boumerdès": 35,
+        "El Tarf": 36, "Tindouf": 37, "Tissemsilt": 38, "El Oued": 39, "Khenchela": 40,
+        "Souk Ahras": 41, "Tipaza": 42, "Mila": 43, "Aïn Defla": 44, "Naâma": 45,
+        "Aïn Témouchent": 46, "Ghardaïa": 47, "Relizane": 48, "Timimoun": 49, "Bordj Badji Mokhtar": 50,
+        "Ouled Djellal": 51, "Béni Abbès": 52, "In Salah": 53, "In Guezzam": 54, "Touggourt": 55,
+        "Djanet": 56, "El M'Ghair": 57, "El Menia": 58
+      };
 
       const api_id = process.env.GUEPEX_API_ID;
       const api_token = process.env.GUEPEX_API_TOKEN;
-
       if (!api_id || !api_token) {
         return res.status(500).json({ error: "GUEPEX credentials are not configured" });
       }
 
-      const centersUrl = new URL("https://api.guepex.app/v1/centers/");
-      centersUrl.searchParams.append("wilaya_id", wilaya_id.toString());
+      let allAgencies: Record<string, any[]> = {};
       
-      const response = await fetch(centersUrl.toString(), {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-ID": api_id,
-          "X-API-TOKEN": api_token
+      for (const [name, id] of Object.entries(WILAYA_CODES)) {
+        try {
+          const centersUrl = new URL("https://api.guepex.app/v1/centers/");
+          centersUrl.searchParams.append("wilaya_id", id.toString());
+          const response = await fetch(centersUrl.toString(), {
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-ID": api_id,
+              "X-API-TOKEN": api_token
+            }
+          });
+          const data = await response.json().catch(()=>null);
+          if (data && data.data) {
+            allAgencies[name] = data.data;
+          }
+        } catch (e) {
+          console.error('Error fetching for', name, e);
         }
-      });
-
-      if (!response.ok) {
-          return res.status(response.status).json({ error: "Failed to fetch centers from Guepex" });
       }
 
-      const data = await response.json();
-      return res.status(200).json(data);
-
-    } catch (error: any) {
-      console.error("Guepex Centers API Error:", error);
-      return res.status(500).json({ error: "Internal server error", details: error.message });
+      return res.status(200).json({ success: true, allAgencies });
+    } catch (e: any) {
+      console.error(e);
+      return res.status(500).json({ error: e.message });
     }
   });
+
 
   app.post("/api/guepex-sync", async (req, res) => {
     try {
@@ -262,15 +309,9 @@ async function startServer() {
           console.error("Failed to fetch stopdesk center:", e);
         }
       } else {
-        // Apply global routing override for all direct home delivery orders:
-        const chefLieu = getChefLieu(to_wilaya_name);
-        if (chefLieu && chefLieu.toLowerCase() !== to_commune_name.toLowerCase()) {
-          final_commune_name = chefLieu;
-          const communePrefix = `${to_commune_name}, `;
-          if (!address.toLowerCase().includes(to_commune_name.toLowerCase())) {
-            final_address = `${communePrefix}${address}`;
-          }
-        }
+        // Direct home delivery order: use exact selected commune name
+        final_commune_name = to_commune_name;
+        final_address = address;
       }
 
       const parcel = {

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, Volume2, VolumeX, Maximize, Sparkles, CheckCircle, ShieldCheck, BookOpen, PackageCheck, Award } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Sparkles, CheckCircle, ShieldCheck, BookOpen, Truck, Banknote, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export interface VideoShowcaseSettings {
@@ -209,7 +209,7 @@ export function QualityShowcaseVideo() {
       </div>
 
       {/* Quality Features / Badges Grid - Perfectly Balanced & Centered */}
-      <div className="max-w-3xl mx-auto mt-8 px-4">
+      <div className="max-w-4xl mx-auto mt-8 px-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-4 rounded-2xl flex flex-col items-center text-center justify-center space-y-2 shadow-lg transition-all hover:bg-white/10 hover:border-white/20 hover:-translate-y-0.5 group min-h-[110px]">
             <div className="p-2.5 bg-primary/20 text-primary-light rounded-xl group-hover:scale-110 transition-transform">
@@ -223,31 +223,31 @@ export function QualityShowcaseVideo() {
 
           <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-4 rounded-2xl flex flex-col items-center text-center justify-center space-y-2 shadow-lg transition-all hover:bg-white/10 hover:border-white/20 hover:-translate-y-0.5 group min-h-[110px]">
             <div className="p-2.5 bg-rose-500/20 text-rose-400 rounded-xl group-hover:scale-110 transition-transform">
-              <Award className="w-5 h-5" />
+              <Truck className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs sm:text-sm font-bold text-white leading-tight">Soft Cover</p>
-              <p className="text-[11px] text-white/50 leading-tight mt-1">Premium tactile feel</p>
+              <p className="text-xs sm:text-sm font-bold text-white leading-tight">58 Wilayas</p>
+              <p className="text-[11px] text-white/50 leading-tight mt-1">Delivery to all wilayas</p>
             </div>
           </div>
 
           <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-4 rounded-2xl flex flex-col items-center text-center justify-center space-y-2 shadow-lg transition-all hover:bg-white/10 hover:border-white/20 hover:-translate-y-0.5 group min-h-[110px]">
             <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl group-hover:scale-110 transition-transform">
-              <ShieldCheck className="w-5 h-5" />
+              <Banknote className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs sm:text-sm font-bold text-white leading-tight">Inspected</p>
-              <p className="text-[11px] text-white/50 leading-tight mt-1">Quality verified</p>
+              <p className="text-xs sm:text-sm font-bold text-white leading-tight">Pay on Delivery</p>
+              <p className="text-[11px] text-white/50 leading-tight mt-1">Payment after delivery</p>
             </div>
           </div>
 
           <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-4 rounded-2xl flex flex-col items-center text-center justify-center space-y-2 shadow-lg transition-all hover:bg-white/10 hover:border-white/20 hover:-translate-y-0.5 group min-h-[110px]">
             <div className="p-2.5 bg-amber-500/20 text-amber-400 rounded-xl group-hover:scale-110 transition-transform">
-              <PackageCheck className="w-5 h-5" />
+              <FileText className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs sm:text-sm font-bold text-white leading-tight">Protected</p>
-              <p className="text-[11px] text-white/50 leading-tight mt-1">Bubble wrapped</p>
+              <p className="text-xs sm:text-sm font-bold text-white leading-tight">Yellowish Paper</p>
+              <p className="text-[11px] text-white/50 leading-tight mt-1">Eye-friendly reading</p>
             </div>
           </div>
         </div>
