@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 
 interface GuepexCenter {
   center_id: number;
+  id?: number;
   wilaya_id: number;
   name: string;
   address: string;
@@ -87,10 +88,10 @@ export function ManageLocations() {
         // 2. Agencies
         const currentAgenciesSet = new Set<number>();
         Object.values(dbGuepexAgencies).forEach(list => {
-          list.forEach(a => currentAgenciesSet.add(a.id));
+          list.forEach((a: any) => currentAgenciesSet.add(a.id || a.center_id));
         });
 
-        const newA = centers.filter(c => !currentAgenciesSet.has(c.center_id));
+        const newA = centers.filter(c => !currentAgenciesSet.has(c.center_id || c.id));
         setNewAgencies(newA);
         
         // Count total DB communes
@@ -222,7 +223,7 @@ export function ManageLocations() {
              <div className="mt-3">
                <p className="text-green-400 font-bold text-sm mb-1">New Agencies Detected:</p>
                <ul className="list-disc pl-5 text-xs text-white/70 space-y-1">
-                 {newAgencies.map(a => <li key={a.center_id}>{a.name} ({a.commune_name})</li>)}
+                 {newAgencies.map((a: any, idx: number) => <li key={a.center_id || a.id || idx}>{a.name} ({a.commune_name})</li>)}
                </ul>
              </div>
            ) : (

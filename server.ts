@@ -284,7 +284,7 @@ app.get("/api/health", (req, res) => {
             if (centersList.length > 0) {
               let chosenCenter = null;
               if (stopdesk_id) {
-                chosenCenter = centersList.find((c: any) => Number(c.center_id) === Number(stopdesk_id));
+                chosenCenter = centersList.find((c: any) => Number(c.center_id || c.id) === Number(stopdesk_id));
               }
               if (!chosenCenter) {
                 const normalize = (str: string) => (str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -295,7 +295,7 @@ app.get("/api/health", (req, res) => {
                 ) || centersList[0];
               }
               if (chosenCenter) {
-                stopdesk_id = Number(chosenCenter.center_id);
+                stopdesk_id = Number(chosenCenter.center_id || chosenCenter.id);
                 if (chosenCenter.commune_name) {
                   // FORCE the commune name to follow the chosen agency
                   final_commune_name = chosenCenter.commune_name;

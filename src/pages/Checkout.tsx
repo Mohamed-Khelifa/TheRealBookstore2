@@ -204,16 +204,17 @@ export default function Checkout() {
           setAgencies(agencyList);
           
           if (agencyList.length > 0) {
-            const currentAgency = agencyList.find((a: any) => String(a.id) === String(formData.agency));
+            const currentAgency = agencyList.find((a: any) => String(a.center_id || a.id || '') === String(formData.agency));
             if (currentAgency) {
               if (currentAgency.commune_name) {
                 setFormData(prev => ({ ...prev, baladia: currentAgency.commune_name }));
               }
             } else {
               const first = agencyList[0];
+              const agencyId = String(first.center_id || first.id || '');
               setFormData(prev => ({
                 ...prev,
-                agency: String(first.id),
+                agency: agencyId,
                 baladia: first.commune_name || prev.baladia
               }));
             }
@@ -272,7 +273,7 @@ export default function Checkout() {
     
     // For office delivery, force commune to follow the selected agency's commune
     if (formData.shipping_method === 'office' && formData.agency && agencies.length > 0) {
-      const chosenAgency = agencies.find(a => String(a.center_id) === String(formData.agency));
+      const chosenAgency = agencies.find(a => String(a.center_id || a.id || '') === String(formData.agency));
       if (chosenAgency && chosenAgency.commune_name) {
         formData.baladia = chosenAgency.commune_name;
       }
@@ -432,7 +433,7 @@ export default function Checkout() {
 
         // 4. Submit Order
         const safeTotal = isNaN(total) ? 0 : total;
-        const selectedAgencyObj = agencies.find(a => a.center_id.toString() === formData.agency);
+        const selectedAgencyObj = agencies.find(a => String(a.center_id || a.id || '') === String(formData.agency));
         const agencyName = selectedAgencyObj ? `${selectedAgencyObj.name} (${selectedAgencyObj.commune_name})` : formData.agency;
         
         const initialNoteParts = [
