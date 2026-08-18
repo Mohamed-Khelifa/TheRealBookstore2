@@ -282,12 +282,12 @@ export default function SocialCards({ cards }: SocialCardsProps) {
 
   return (
     <section 
-      className="flex flex-col items-center w-full py-4 lg:py-8 px-4 md:px-8 relative z-20 overflow-hidden min-h-[500px]"
+      className="flex flex-col items-center w-full py-6 lg:py-10 px-4 md:px-8 relative z-20 min-h-[580px]"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
       <div className="flex items-center justify-center w-full max-w-[90rem]">
-        <div ref={containerRef} className="fan-layout flex relative justify-center items-center w-full max-w-[80rem] h-[350px] md:h-[450px]">
+        <div ref={containerRef} className="fan-layout flex relative justify-center items-center w-full max-w-[80rem] h-[400px] sm:h-[460px] md:h-[520px]">
           {cards.map((card, index) => {
             const image = (
               <div className="relative w-full h-full overflow-hidden rounded-2xl shadow-xl border border-white/10 bg-black/20 dark:bg-white/5 backdrop-blur-sm">
@@ -295,9 +295,9 @@ export default function SocialCards({ cards }: SocialCardsProps) {
               </div>
             );
             return card.linkUrl ? (
-              <a key={index} href={card.linkUrl} target={card.linkUrl.startsWith("http") ? "_blank" : "_self"} rel="noopener noreferrer" className="fan-card absolute w-[160px] h-[260px] sm:w-[200px] sm:h-[320px] md:w-[240px] md:h-[384px] block cursor-pointer transition-shadow hover:shadow-2xl">{image}</a>
+              <a key={index} href={card.linkUrl} target={card.linkUrl.startsWith("http") ? "_blank" : "_self"} rel="noopener noreferrer" className="fan-card absolute w-[170px] h-[270px] sm:w-[210px] sm:h-[330px] md:w-[250px] md:h-[390px] block cursor-pointer transition-shadow hover:shadow-2xl">{image}</a>
             ) : (
-              <div key={index} className="fan-card absolute w-[160px] h-[260px] sm:w-[200px] sm:h-[320px] md:w-[240px] md:h-[384px] transition-shadow hover:shadow-2xl">{image}</div>
+              <div key={index} className="fan-card absolute w-[170px] h-[270px] sm:w-[210px] sm:h-[330px] md:w-[250px] md:h-[390px] transition-shadow hover:shadow-2xl">{image}</div>
             );
           })}
         </div>

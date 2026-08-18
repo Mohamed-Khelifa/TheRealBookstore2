@@ -275,6 +275,9 @@ const ScrollExpandMedia = ({
                         loop
                         playsInline
                         preload='auto'
+                        onError={(e) => {
+                          (e.target as HTMLVideoElement).style.display = 'none';
+                        }}
                         className='w-full h-full object-cover rounded-xl'
                         controls={false}
                         disablePictureInPicture

@@ -9,6 +9,7 @@ import { fetchAllRows } from '../lib/api';
 import { HeroScrollDemo } from '../components/HeroScrollDemo';
 import { fuzzyMatch, getSearchRelevance, searchBooks } from '../lib/utils';
 import SocialCards from '../components/ui/card-fan-carousel';
+import { QualityShowcaseVideo } from '../components/QualityShowcaseVideo';
 
 import { BundleCover } from '../components/BundleCover';
 import { DynamicIslandTOC } from '../components/ui/dynamic-island-toc';
@@ -916,6 +917,9 @@ export default function Home() {
           />
         </section>
       )}
+
+      {/* Book Quality Video Showcase Section */}
+      <QualityShowcaseVideo />
 
       {/* Let Fate Choose Section */}
       {/* Combined Discovery & Wishlist Section */}

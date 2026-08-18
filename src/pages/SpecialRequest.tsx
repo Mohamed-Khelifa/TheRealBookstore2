@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { supabase } from '../lib/supabase';
+
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, MapPin, Phone, Mail, User, Instagram, CheckCircle, ArrowLeft, Truck } from 'lucide-react';
 import { motion } from 'motion/react';
-import { supabase } from '../lib/supabase';
+
 import { trackLead } from '../lib/metaPixel';
+import { DEFAULT_WILAYA_COMMUNES, DEFAULT_STOPDESK_COMMUNES } from '../data/locationData';
 
 // Use direct imports to make load robust and fast
-import wilayaCommunes from '../../public/wilaya_communes.json';
-import stopDeskCommunes from '../../public/wilaya_stopdesk_communes.json';
+
+
 
 export default function SpecialRequest() {
   const navigate = useNavigate();
@@ -28,8 +31,39 @@ export default function SpecialRequest() {
   });
 
   // Calculate active communes and Wilayas based on shipping method chosen
-  const activeCommunesMap = (formData.shipping_method === 'office' ? stopDeskCommunes : wilayaCommunes) as Record<string, string[]>;
-  const activeWilayas = Object.keys(activeCommunesMap);
+  
+  const [activeCommunesMap, setActiveCommunesMap] = useState<Record<string, string[]>>(DEFAULT_WILAYA_COMMUNES);
+  const [activeWilayas, setActiveWilayas] = useState<string[]>(Object.keys(DEFAULT_WILAYA_COMMUNES).sort());
+  const [allStopdeskCommunes, setAllStopdeskCommunes] = useState<Record<string, string[]>>(DEFAULT_STOPDESK_COMMUNES);
+  const [allWilayaCommunes, setAllWilayaCommunes] = useState<Record<string, string[]>>(DEFAULT_WILAYA_COMMUNES);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data: settingsData } = await supabase.from('site_settings').select('key, value');
+      if (settingsData) {
+        const wc = settingsData.find(s => s.key === 'wilaya_communes');
+        const sc = settingsData.find(s => s.key === 'stopdesk_communes');
+
+        if (wc) {
+          const parsedWc = typeof wc.value === 'string' ? JSON.parse(wc.value) : wc.value;
+          if (parsedWc && Object.keys(parsedWc).length >= 10) setAllWilayaCommunes(parsedWc);
+        }
+        if (sc) {
+          const parsedSc = typeof sc.value === 'string' ? JSON.parse(sc.value) : sc.value;
+          if (parsedSc && Object.keys(parsedSc).length >= 10) setAllStopdeskCommunes(parsedSc);
+        }
+      }
+    };
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    const map = formData.shipping_method === 'office' ? allStopdeskCommunes : allWilayaCommunes;
+    const currentMap = (map && Object.keys(map).length > 0) ? map : (formData.shipping_method === 'office' ? DEFAULT_STOPDESK_COMMUNES : DEFAULT_WILAYA_COMMUNES);
+    setActiveCommunesMap(currentMap);
+    setActiveWilayas(Object.keys(currentMap).sort());
+  }, [formData.shipping_method, allStopdeskCommunes, allWilayaCommunes]);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -226,8 +260,8 @@ export default function SpecialRequest() {
               type="button"
               onClick={() => {
                 setFormData(prev => {
-                  const newWilaya = stopDeskCommunes.hasOwnProperty(prev.wilaya) ? prev.wilaya : '';
-                  const newBaladia = newWilaya && (stopDeskCommunes as Record<string, string[]>)[newWilaya].includes(prev.baladia) ? prev.baladia : '';
+                  const newWilaya = allStopdeskCommunes.hasOwnProperty(prev.wilaya) ? prev.wilaya : '';
+                  const newBaladia = newWilaya && (allStopdeskCommunes as Record<string, string[]>)[newWilaya].includes(prev.baladia) ? prev.baladia : '';
                   return { ...prev, shipping_method: 'office', wilaya: newWilaya, baladia: newBaladia };
                 });
               }}
@@ -255,7 +289,7 @@ export default function SpecialRequest() {
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary/40 outline-none"
               >
                 <option value="" className="bg-ink">Select Wilaya</option>
-                {activeWilayas.map(w => <option key={w} value={w} className="bg-ink">{w}</option>)}
+                {activeWilayas.map((w, idx) => <option key={`wilaya-${w}-${idx}`} value={w} className="bg-ink">{w}</option>)}
               </select>
             </div>
             <div className="space-y-2">
@@ -271,7 +305,7 @@ export default function SpecialRequest() {
                 ) : (
                   <>
                     <option value="" className="bg-ink">Select Commune (Baladia)</option>
-                    {activeCommunesMap[formData.wilaya]?.map(c => <option key={c} value={c} className="bg-ink">{c}</option>)}
+                    {activeCommunesMap[formData.wilaya]?.map((c, idx) => <option key={`commune-${c}-${idx}`} value={c} className="bg-ink">{c}</option>)}
                   </>
                 )}
               </select>

@@ -1,3 +1,4 @@
+import { ManageLocations } from '../components/ManageLocations';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
@@ -6,7 +7,7 @@ import {
   LayoutDashboard, BookOpen, Truck, ShoppingBag, MessageSquare, 
   Plus, Edit, Trash2, Save, X, Check, Search, ExternalLink, Star,
   Quote as QuoteIcon, RefreshCw, ClipboardList, Sparkles, Tag, Trophy, Gift, Info, Clock, Download,
-  CheckCircle, XCircle, Instagram, Copy, Printer, BarChart2, Zap, Radio, ChevronLeft, ChevronRight
+  CheckCircle, XCircle, Instagram, Copy, Printer, BarChart2, Zap, Radio, ChevronLeft, ChevronRight, FileText, Video
 } from 'lucide-react';
 import { Book, Order, ShippingRate, Review, User, Quote, SpecialRequest, Discount, LoyaltyPoints } from '../types';
 import { supabase } from '../lib/supabase';
@@ -19,6 +20,8 @@ import wilayaList from '../../public/wilaya_list.json';
 import ManageAnalytics from "./ManageAnalytics";
 import ManageMetaPixel from "./ManageMetaPixel";
 import ManageWhatsApp, { DEFAULT_WHATSAPP_TEMPLATE } from "./ManageWhatsApp";
+import ManageCheckoutNote from "./ManageCheckoutNote";
+import ManageShowcaseVideo from "./ManageShowcaseVideo";
 import LiveDeliveryFeed from "./LiveDeliveryFeed";
 import { ECONOMIC_RATES, getEconomicRate } from '../data/shippingRates';
 
@@ -165,6 +168,14 @@ export default function AdminDashboard({ user }: { user: User | null }) {
             <MessageSquare className="w-5 h-5 text-emerald-400" />
             <span className="font-bold text-sm">WhatsApp Msg</span>
           </Link>
+          <Link to="/admin/checkout-note" className={`flex items-center space-x-3 p-3 rounded-2xl transition-all duration-300 ${location.pathname.startsWith('/admin/checkout-note') ? 'bg-primary text-white shadow-[0_0_20px_rgba(139,92,246,0.3)]' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
+            <FileText className="w-5 h-5 text-primary-light" />
+            <span className="font-bold text-sm">Checkout Note</span>
+          </Link>
+          <Link to="/admin/showcase-video" className={`flex items-center space-x-3 p-3 rounded-2xl transition-all duration-300 ${location.pathname.startsWith('/admin/showcase-video') ? 'bg-purple-600 text-white shadow-[0_0_20px_rgba(147,51,234,0.3)]' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
+            <Video className="w-5 h-5 text-purple-400" />
+            <span className="font-bold text-sm">Quality Showcase Video</span>
+          </Link>
           
           <div className="pt-4 mt-4 border-t border-white/10">
             <Link to="/" className="flex items-center space-x-3 p-3 rounded-2xl text-white/40 hover:bg-white/5 hover:text-white transition-all group">
@@ -195,6 +206,8 @@ export default function AdminDashboard({ user }: { user: User | null }) {
           <Route path="/screenshots" element={<ManageScreenshots />} />
           <Route path="/meta-pixel" element={<ManageMetaPixel />} />
           <Route path="/whatsapp" element={<ManageWhatsApp />} />
+          <Route path="/checkout-note" element={<ManageCheckoutNote />} />
+          <Route path="/showcase-video" element={<ManageShowcaseVideo />} />
         </Routes>
       </main>
     </div>
@@ -1135,6 +1148,43 @@ function ManageOrders() {
     }
   };
 
+  const handleClientNoteUpdate = async (order: any, note: string) => {
+    setUpdatingId(order.id);
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .update({ client_note: note })
+        .eq('id', order.id)
+        .select();
+      
+      if (error || !data || data.length === 0) {
+        // Fallback: Update by matching other unique-ish fields
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('orders')
+          .update({ client_note: note })
+          .match({ 
+            phone: order.phone, 
+            created_at: order.created_at,
+            customer_name: order.customer_name
+          })
+          .select();
+          
+        if (fallbackError) throw fallbackError;
+        if (!fallbackData || fallbackData.length === 0) {
+          throw new Error('Order not found in database');
+        }
+      }
+      
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, client_note: note } : o));
+      setStatusMsg({ type: 'success', text: `Client note updated` });
+    } catch (err: any) {
+      console.error('Error updating client note:', err);
+      setStatusMsg({ type: 'error', text: `Failed to update client note: ${err.message || 'Unknown error'}` });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const handleDeleteOrder = async (order: any) => {
     const idStr = String(order.id);
     
@@ -1672,7 +1722,11 @@ function ManageOrders() {
                              address: `${order.wilaya}, ${order.baladia}`,
                              to_commune_name: order.baladia,
                              to_wilaya_name: order.wilaya,
-                             price: order.items.reduce((sum: number, item: any) => sum + ((item.price || 0) * (item.qty || 1)), 0),
+                             price: (() => {
+                               const rate = getEconomicRate(order.wilaya) || shippingRates.find(r => r.wilaya.toLowerCase().trim() === order.wilaya.toLowerCase().trim());
+                               const shippingCost = rate ? (order.shipping_method === 'office' ? rate.office_pickup_rate : rate.rate_per_item) : 0;
+                               return Math.max(0, (order.total_price || 0) - shippingCost);
+                             })(),
                              product_list: order.items.map((i:any) => `${i.qty}x ${i.title}`).join(', '),
                              is_stopdesk: order.shipping_method === 'office',
                              stopdesk_id: null // Will be auto-resolved in backend
@@ -1849,14 +1903,20 @@ function ManageOrders() {
                       <span className="text-xs font-bold uppercase tracking-widest notranslate">{order.points} BigDeal Points</span>
                     </div>
 
-                    {order.client_note && (
-                      <div className="pt-4 border-t border-white/10 space-y-2">
-                        <p className="text-xs font-bold text-white/30 uppercase tracking-[0.2em]">Client Note</p>
-                        <div className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/80">
-                          {order.client_note}
-                        </div>
-                      </div>
-                    )}
+                    <div className="pt-4 border-t border-white/10 space-y-2">
+                      <p className="text-xs font-bold text-white/30 uppercase tracking-[0.2em]">Client Note</p>
+                      <textarea
+                        defaultValue={order.client_note || ''}
+                        onBlur={(e) => {
+                          if (e.target.value !== (order.client_note || '')) {
+                            handleClientNoteUpdate(order, e.target.value);
+                          }
+                        }}
+                        placeholder="Add or modify client note..."
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+                        rows={3}
+                      />
+                    </div>
 
                     <div className="pt-4 border-t border-white/10 space-y-2">
                       <p className="text-xs font-bold text-white/30 uppercase tracking-[0.2em]">Our Special Note</p>
@@ -1922,9 +1982,15 @@ function ManageOrders() {
                       );
                     })}
                   </ul>
-                  <div className="pt-4 border-t border-white/10 flex justify-between items-center">
-                    <span className="text-sm font-bold text-white/40 uppercase tracking-widest">Grand Total</span>
-                    <span className="text-2xl font-bold text-primary-light">{(order.total_price || 0).toFixed(2)} DA</span>
+                  <div className="pt-4 border-t border-white/10 flex flex-col gap-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-white/40 uppercase tracking-widest">Subtotal (Books)</span>
+                      <span className="text-sm font-bold text-white/70">{(order.items?.reduce((sum: number, item: any) => sum + ((item.price || 0) * (item.qty || 1)), 0) || 0).toFixed(2)} DA</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-bold text-white/40 uppercase tracking-widest">Grand Total</span>
+                      <span className="text-2xl font-bold text-primary-light">{(order.total_price || 0).toFixed(2)} DA</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2098,6 +2164,7 @@ function ManageShipping() {
           </div>
         ))}
       </div>
+      <ManageLocations />
     </div>
   );
 }

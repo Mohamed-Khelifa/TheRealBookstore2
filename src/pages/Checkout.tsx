@@ -9,10 +9,12 @@ import { supabase } from '../lib/supabase';
 import { formatOrderRef } from '../lib/utils';
 
 import { HolographicReceipt } from '../components/HolographicReceipt';
-import wilayaCommunes from '../../public/wilaya_communes.json';
+
 import { LazyImage } from '../components/ui/lazy-image';
 import { ECONOMIC_RATES, getEconomicRate } from '../data/shippingRates';
+import { DEFAULT_WILAYA_COMMUNES, DEFAULT_STOPDESK_COMMUNES, DEFAULT_GUEPEX_AGENCIES } from '../data/locationData';
 import { trackInitiateCheckout, trackAddPaymentInfo, trackPurchase } from '../lib/metaPixel';
+import { DEFAULT_CHECKOUT_COVER_NOTE } from './ManageCheckoutNote';
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -35,16 +37,33 @@ export default function Checkout() {
     notes: '',
     shipping_method: 'direct' as 'direct' | 'office'
   });
-  const [agencies, setAgencies] = useState<{center_id: number, name: string, commune_name: string}[]>([]);
+  const [agencies, setAgencies] = useState<any[]>([]);
   const [isLoadingAgencies, setIsLoadingAgencies] = useState(false);
   const [userPoints, setUserPoints] = useState<number | null>(null);
   const [selectedReward, setSelectedReward] = useState<string | null>(null);
   const [isFetchingPoints, setIsFetchingPoints] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeCommunesMap, setActiveCommunesMap] = useState<Record<string, string[]>>(DEFAULT_WILAYA_COMMUNES);
 
-  // Derive active communes and wilayas based on shipping method
-  const activeCommunesMap = wilayaCommunes as Record<string, string[]>;
-  const activeWilayas = Object.keys(activeCommunesMap);
+  const [allWilayaCommunes, setAllWilayaCommunes] = useState<Record<string, string[]>>(DEFAULT_WILAYA_COMMUNES);
+  const [allStopdeskCommunes, setAllStopdeskCommunes] = useState<Record<string, string[]>>(DEFAULT_STOPDESK_COMMUNES);
+
+  const [activeWilayas, setActiveWilayas] = useState<string[]>(Object.keys(DEFAULT_WILAYA_COMMUNES).sort());
+  const [allGuepexAgencies, setAllGuepexAgencies] = useState<Record<string, any[]>>(DEFAULT_GUEPEX_AGENCIES);
+  const [checkoutCoverNote, setCheckoutCoverNote] = useState<string>(DEFAULT_CHECKOUT_COVER_NOTE);
+
+  
+  useEffect(() => {
+    const map = formData.shipping_method === 'office' ? allStopdeskCommunes : allWilayaCommunes;
+    const currentMap = (map && Object.keys(map).length > 0) ? map : (formData.shipping_method === 'office' ? DEFAULT_STOPDESK_COMMUNES : DEFAULT_WILAYA_COMMUNES);
+    setActiveCommunesMap(currentMap);
+    if (Object.keys(currentMap).length > 0) {
+      setActiveWilayas(Object.keys(currentMap).sort());
+    }
+  }, [formData.shipping_method, allStopdeskCommunes, allWilayaCommunes]);
+
+
+
 
   useEffect(() => {
     if (items.length > 0) {
@@ -123,6 +142,7 @@ export default function Checkout() {
         console.warn('Auto-sync rates warning:', e);
       }
 
+      
       const { data: ratesData } = await supabase.from('shipping_rates').select('*');
       if (ratesData && ratesData.length > 0) {
         setRates(ratesData);
@@ -130,12 +150,40 @@ export default function Checkout() {
         setRates(ECONOMIC_RATES);
       }
       
-      const { data: rulesData } = await supabase
-        .from('site_settings')
-        .select('value')
-        .eq('key', 'discount_rules')
-        .maybeSingle();
-      if (rulesData) setDiscountRules(rulesData.value);
+      const { data: settingsData } = await supabase.from('site_settings').select('key, value');
+      if (settingsData) {
+        const rules = settingsData.find(s => s.key === 'discount_rules');
+        if (rules) setDiscountRules(rules.value);
+
+        const wc = settingsData.find(s => s.key === 'wilaya_communes');
+        const sc = settingsData.find(s => s.key === 'stopdesk_communes');
+        const ga = settingsData.find(s => s.key === 'guepex_agencies');
+
+        
+        if (wc) {
+          const parsedWc = typeof wc.value === 'string' ? JSON.parse(wc.value) : wc.value;
+          if (parsedWc && Object.keys(parsedWc).length >= 10) setAllWilayaCommunes(parsedWc);
+        }
+        if (sc) {
+          const parsedSc = typeof sc.value === 'string' ? JSON.parse(sc.value) : sc.value;
+          if (parsedSc && Object.keys(parsedSc).length >= 10) setAllStopdeskCommunes(parsedSc);
+        }
+        if (ga) {
+          const parsedGa = typeof ga.value === 'string' ? JSON.parse(ga.value) : ga.value;
+          if (parsedGa && Object.keys(parsedGa).length >= 5) setAllGuepexAgencies(parsedGa);
+        }
+
+        const noteSetting = settingsData.find(s => s.key === 'checkout_cover_note');
+        if (noteSetting && noteSetting.value) {
+          const val = typeof noteSetting.value === 'string' ? noteSetting.value : String(noteSetting.value);
+          if (val.trim()) setCheckoutCoverNote(val);
+        }
+
+
+        // Calculate wilayas based on available map
+        
+      }
+
       
     };
     fetchData();
@@ -146,41 +194,37 @@ export default function Checkout() {
       if (formData.shipping_method === 'office' && formData.wilaya) {
         setIsLoadingAgencies(true);
         try {
-          const res = await fetch(`/api/guepex-centers?wilaya_name=${encodeURIComponent(formData.wilaya)}`);
-          if (res.ok) {
-            const data = await res.json();
-            const agencyList = data.data || [];
-            setAgencies(agencyList);
-            if (agencyList.length > 0) {
-              const currentAgency = agencyList.find((a: any) => String(a.center_id) === String(formData.agency));
-              if (currentAgency) {
-                if (currentAgency.commune_name) {
-                  setFormData(prev => ({ ...prev, baladia: currentAgency.commune_name }));
-                }
-              } else {
-                const first = agencyList[0];
-                setFormData(prev => ({
-                  ...prev,
-                  agency: String(first.center_id),
-                  baladia: first.commune_name || prev.baladia
-                }));
+          const agencyList = allGuepexAgencies[formData.wilaya] || [];
+          setAgencies(agencyList);
+          
+          if (agencyList.length > 0) {
+            const currentAgency = agencyList.find((a: any) => String(a.id) === String(formData.agency));
+            if (currentAgency) {
+              if (currentAgency.commune_name) {
+                setFormData(prev => ({ ...prev, baladia: currentAgency.commune_name }));
               }
             } else {
-              setFormData(prev => ({ ...prev, agency: '' }));
+              const first = agencyList[0];
+              setFormData(prev => ({
+                ...prev,
+                agency: String(first.id),
+                baladia: first.commune_name || prev.baladia
+              }));
             }
+          } else {
+            setFormData(prev => ({ ...prev, agency: '' }));
           }
         } catch (e) {
-          console.error("Failed to fetch agencies", e);
+          console.error("Failed to load agencies from DB", e);
         } finally {
           setIsLoadingAgencies(false);
         }
       } else {
         setAgencies([]);
-        setFormData(prev => ({ ...prev, agency: '' }));
       }
     };
     fetchAgencies();
-  }, [formData.wilaya, formData.shipping_method]);
+  }, [formData.wilaya, formData.shipping_method, allGuepexAgencies]);
 
   const FREE_SHIPPING_THRESHOLD = 10000;
   const subtotalVal = subtotal();
@@ -450,7 +494,7 @@ export default function Checkout() {
               address: `${formData.wilaya}, ${formData.baladia}`,
               to_commune_name: formData.baladia,
               to_wilaya_name: formData.wilaya,
-              price: safeTotal,
+              price: subtotalVal < 10000 ? Math.max(0, subtotalVal - discountAmount - loyaltyDiscount) : Math.max(0, subtotalVal - discountAmount - loyaltyDiscount - shippingCost),
               product_list: items.map(i => `${i.qty}x ${i.title}`).join(', '),
               is_stopdesk: formData.shipping_method === 'office',
               stopdesk_id: formData.shipping_method === 'office' && formData.agency ? parseInt(formData.agency) : null
@@ -1079,9 +1123,7 @@ export default function Checkout() {
                 
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-sm text-white/60 leading-relaxed italic relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-1 h-full bg-primary/40" />
-                  <p>
-                    "Please note that there may be slight variations between the cover image in our gallery and the physical book you receive. This is often due to different editions or publisher updates. Rest assured, we guarantee the content is identical and of the highest quality. If there is a major difference, we will reach out to you personally via Instagram or phone to confirm your approval before shipping. <strong>Thank you for your confidentiality</strong> 😊"
-                  </p>
+                  <div dangerouslySetInnerHTML={{ __html: `"${checkoutCoverNote.replace(/^"|"$/g, '')}"` }} />
                 </div>
               </div>
             </div>
@@ -1121,7 +1163,7 @@ export default function Checkout() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <select required value={formData.wilaya} onChange={e => setFormData({...formData, wilaya: e.target.value, baladia: ''})} className={`w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary/40 outline-none transition-all ${getValidationClass(formData.wilaya)}`}>
                 <option value="" className="bg-ink">Select Wilaya</option>
-                {activeWilayas.map(w => <option key={w} value={w} className="bg-ink">{w}</option>)}
+                {activeWilayas.map((w, idx) => <option key={`wilaya-${w}-${idx}`} value={w} className="bg-ink">{w}</option>)}
               </select>
               <select 
                 required 
@@ -1134,18 +1176,20 @@ export default function Checkout() {
                       (a.name || '').toLowerCase().trim().includes(selectedBaladia.toLowerCase().trim())
                     );
                     if (matchingAgency) {
+                      const agencyId = String(matchingAgency.center_id || matchingAgency.id || '');
                       setFormData(prev => ({
                         ...prev,
                         baladia: matchingAgency.commune_name || selectedBaladia,
-                        agency: String(matchingAgency.center_id)
+                        agency: agencyId
                       }));
                     } else {
-                      const currentAgency = agencies.find(a => String(a.center_id) === String(formData.agency)) || agencies[0];
+                      const currentAgency = agencies.find(a => String(a.center_id || a.id) === String(formData.agency)) || agencies[0];
                       if (currentAgency && currentAgency.commune_name) {
+                        const agencyId = String(currentAgency.center_id || currentAgency.id || '');
                         setFormData(prev => ({
                           ...prev,
                           baladia: currentAgency.commune_name,
-                          agency: String(currentAgency.center_id)
+                          agency: agencyId
                         }));
                       } else {
                         setFormData(prev => ({ ...prev, baladia: selectedBaladia }));
@@ -1162,7 +1206,7 @@ export default function Checkout() {
                 ) : (
                   <>
                     <option value="" className="bg-ink">Select Commune (Baladia)</option>
-                    {activeCommunesMap[formData.wilaya]?.map(c => <option key={c} value={c} className="bg-ink">{c}</option>)}
+                    {activeCommunesMap[formData.wilaya]?.map((c, idx) => <option key={`commune-${c}-${idx}`} value={c} className="bg-ink">{c}</option>)}
                   </>
                 )}
               </select>
@@ -1173,7 +1217,7 @@ export default function Checkout() {
                     value={formData.agency} 
                     onChange={e => {
                       const selectedId = e.target.value;
-                      const chosen = agencies.find(a => String(a.center_id) === String(selectedId));
+                      const chosen = agencies.find(a => String(a.center_id || a.id) === String(selectedId));
                       if (chosen && chosen.commune_name) {
                         setFormData(prev => ({
                           ...prev,
@@ -1195,9 +1239,12 @@ export default function Checkout() {
                     ) : (
                       <>
                         <option value="" className="bg-ink">Select Agency</option>
-                        {agencies.map(a => (
-                          <option key={a.center_id} value={a.center_id} className="bg-ink">{a.name} ({a.commune_name})</option>
-                        ))}
+                        {agencies.map((a, idx) => {
+                          const agencyId = a.center_id || a.id || idx;
+                          return (
+                            <option key={`agency-${agencyId}-${idx}`} value={agencyId} className="bg-ink">{a.name} ({a.commune_name})</option>
+                          );
+                        })}
                       </>
                     )}
                   </select>

@@ -10,9 +10,11 @@ import { supabase } from '../lib/supabase';
 import { fetchAllRows } from '../lib/api';
 
 export default function LiveDeliveryFeed() {
-  const [activeTab, setActiveTab] = useState<'IN_TRANSIT' | 'DELIVERED' | 'RETURNED' | 'PENDING'>('IN_TRANSIT');
+  const [activeTab, setActiveTab] = useState<'IN_TRANSIT' | 'DELIVERED' | 'RETURNED' | 'PENDING' | 'WEBHOOKS'>('IN_TRANSIT');
   const [orders, setOrders] = useState<Order[]>([]);
+  const [webhookLogs, setWebhookLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingWebhooks, setLoadingWebhooks] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -22,9 +24,13 @@ export default function LiveDeliveryFeed() {
   const fetchOrders = async () => {
     setRefreshing(true);
     try {
-      const { data: ordersData } = await fetchAllRows('orders', '*', 'created_at', false);
-      if (ordersData) {
-        setOrders(ordersData);
+      if (activeTab === 'WEBHOOKS') {
+        await fetchWebhookLogs();
+      } else {
+        const { data: ordersData } = await fetchAllRows('orders', '*', 'created_at', false);
+        if (ordersData) {
+          setOrders(ordersData);
+        }
       }
     } catch (err) {
       console.error('Error fetching live delivery data:', err);
@@ -34,37 +40,69 @@ export default function LiveDeliveryFeed() {
     }
   };
 
+  const fetchWebhookLogs = async () => {
+    setLoadingWebhooks(true);
+    try {
+      const res = await fetch('/api/guepex-webhook?logs=true');
+      if (!res.ok) throw new Error('Failed to fetch webhook logs');
+      const data = await res.json();
+      if (data.success && data.logs) {
+        setWebhookLogs(data.logs);
+      }
+    } catch (err) {
+      console.error('Error fetching webhook logs:', err);
+    } finally {
+      setLoadingWebhooks(false);
+    }
+  };
+
   useEffect(() => {
     fetchOrders();
+  }, [activeTab]);
 
+  useEffect(() => {
     const channel = supabase
       .channel('live-delivery-feed')
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'orders' },
+        { event: '*', schema: 'public', table: 'orders' },
         (payload) => {
-          const newOrder = payload.new as Order;
-          const oldOrder = payload.old as Order;
-          
-          setOrders(prev => {
-            const exists = prev.find(o => o.id === newOrder.id);
-            if (exists) {
-              return prev.map(o => o.id === newOrder.id ? newOrder : o);
+          if (payload.eventType === 'INSERT') {
+            const newOrder = payload.new as Order;
+            setOrders(prev => [newOrder, ...prev]);
+            return;
+          }
+
+          if (payload.eventType === 'DELETE') {
+            const oldOrder = payload.old as Order;
+            setOrders(prev => prev.filter(o => o.id !== oldOrder.id));
+            return;
+          }
+
+          if (payload.eventType === 'UPDATE') {
+            const newOrder = payload.new as Order;
+            const oldOrder = payload.old as Order;
+            
+            setOrders(prev => {
+              const exists = prev.find(o => o.id === newOrder.id);
+              if (exists) {
+                return prev.map(o => o.id === newOrder.id ? newOrder : o);
+              }
+              return [newOrder, ...prev];
+            });
+            
+            // Detect newly delivered
+            if (
+              (newOrder.order_state === 'DELIVERED_PAID' || newOrder.status === 'DELIVERED') &&
+              (oldOrder.order_state !== 'DELIVERED_PAID' && oldOrder.status !== 'DELIVERED')
+            ) {
+              triggerNotification(newOrder, 'DELIVERED');
+            } else if (
+              (newOrder.order_state === 'DELIVERED_RETURNED' || newOrder.status === 'CANCELLED') &&
+              (oldOrder.order_state !== 'DELIVERED_RETURNED' && oldOrder.status !== 'CANCELLED')
+            ) {
+              triggerNotification(newOrder, 'RETURNED');
             }
-            return [newOrder, ...prev];
-          });
-          
-          // Detect newly delivered
-          if (
-            (newOrder.order_state === 'DELIVERED_PAID' || newOrder.status === 'DELIVERED') &&
-            (oldOrder.order_state !== 'DELIVERED_PAID' && oldOrder.status !== 'DELIVERED')
-          ) {
-            triggerNotification(newOrder, 'DELIVERED');
-          } else if (
-            (newOrder.order_state === 'DELIVERED_RETURNED' || newOrder.status === 'CANCELLED') &&
-            (oldOrder.order_state !== 'DELIVERED_RETURNED' && oldOrder.status !== 'CANCELLED')
-          ) {
-            triggerNotification(newOrder, 'RETURNED');
           }
         }
       )
@@ -77,8 +115,25 @@ export default function LiveDeliveryFeed() {
 
   const triggerNotification = (order: Order, type: 'DELIVERED' | 'RETURNED') => {
     if (type === 'DELIVERED') {
-      const audio = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-software-interface-start-2574.mp3');
-      audio.play().catch(() => {});
+      try {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContext) {
+          const ctx = new AudioContext();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.3);
+        }
+      } catch (e) {
+        // ignore audio failure
+      }
       
       setLiveNotification({
         id: Math.random().toString(),
@@ -113,17 +168,23 @@ export default function LiveDeliveryFeed() {
     
     switch(activeTab) {
       case 'IN_TRANSIT':
-        return o.status === 'SHIPPED' || o.order_state === 'READY_NOT_DELIVERED' || o.order_state === 'SHIPPED';
+        return o.status === 'SHIPPED' || o.order_state === 'READY_NOT_DELIVERED';
       case 'DELIVERED':
         return o.status === 'DELIVERED' || o.order_state === 'DELIVERED_PAID';
       case 'RETURNED':
-        return o.status === 'CANCELLED' || o.order_state === 'DELIVERED_RETURNED' || o.order_state === 'CANCELLED';
+        return o.status === 'CANCELLED' || o.order_state === 'DELIVERED_RETURNED';
       case 'PENDING':
-        return o.status === 'PENDING' || o.order_state === 'PENDING' || o.order_state === 'DID_NOT_ARRIVE';
+        return o.status === 'PENDING' || o.order_state === 'DID_NOT_ARRIVE';
       default:
         return true;
     }
   });
+
+  const inTransitOrders = orders.filter(o => o.status === 'SHIPPED' || o.order_state === 'READY_NOT_DELIVERED');
+  const theoreticalRevenue = inTransitOrders.reduce((sum, order) => {
+    const subtotal = order.items?.reduce((s: number, item: any) => s + ((item.price || 0) * (item.qty || 1)), 0) || 0;
+    return sum + subtotal;
+  }, 0);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -154,17 +215,26 @@ export default function LiveDeliveryFeed() {
         )}
       </AnimatePresence>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Delivery Management</h1>
           <p className="text-white/50 text-sm mt-1">Live tracking and status updates</p>
         </div>
-        <button 
-          onClick={fetchOrders}
-          className={`p-2.5 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:text-white transition-all ${refreshing ? 'animate-spin' : ''}`}
-        >
-          <RefreshCw className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-4">
+          <div className="bg-primary/10 border border-primary/20 rounded-xl px-4 py-2 flex flex-col">
+            <span className="text-[10px] text-primary-light/70 font-bold uppercase tracking-wider">In Transit Revenue</span>
+            <div className="flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-primary-light" />
+              <span className="text-lg font-bold text-primary-light">{theoreticalRevenue.toLocaleString()} DA</span>
+            </div>
+          </div>
+          <button 
+            onClick={fetchOrders}
+            className={`p-2.5 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:text-white transition-all ${refreshing ? 'animate-spin' : ''}`}
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-4 border-b border-white/10">
@@ -204,6 +274,15 @@ export default function LiveDeliveryFeed() {
           <Clock className="w-4 h-4" />
           Pending Pick-up
         </button>
+        <button
+          onClick={() => setActiveTab('WEBHOOKS')}
+          className={`pb-4 font-bold text-sm flex items-center gap-2 border-b-2 transition-all ${
+            activeTab === 'WEBHOOKS' ? 'border-purple-500 text-purple-400' : 'border-transparent text-white/50 hover:text-white'
+          }`}
+        >
+          <Activity className="w-4 h-4" />
+          Webhook Logs
+        </button>
       </div>
 
       <div className="space-y-6">
@@ -214,19 +293,76 @@ export default function LiveDeliveryFeed() {
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search by name, tracking code, or phone..."
+              placeholder={activeTab === 'WEBHOOKS' ? "Search logs..." : "Search by name, tracking code, or phone..."}
               className="w-full pl-10 pr-4 py-2 bg-black/30 border border-white/10 rounded-xl text-xs text-white placeholder-white/30 focus:outline-none focus:border-primary"
             />
           </div>
           <div className="text-xs text-white/40 font-mono">
-            Showing {filteredOrders.length} orders
+            {activeTab === 'WEBHOOKS' ? `Showing ${webhookLogs.filter(l => (l.message || '').toLowerCase().includes(searchQuery.toLowerCase())).length} logs` : `Showing ${filteredOrders.length} orders`}
           </div>
         </div>
 
         <div className="bg-white/5 rounded-3xl border border-white/10 overflow-hidden shadow-2xl">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
+            {activeTab === 'WEBHOOKS' ? (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-white/10 bg-black/20">
+                    <th className="p-4 text-xs font-bold text-white/40 uppercase tracking-wider">Timestamp</th>
+                    <th className="p-4 text-xs font-bold text-white/40 uppercase tracking-wider">Type & Status</th>
+                    <th className="p-4 text-xs font-bold text-white/40 uppercase tracking-wider">Message</th>
+                    <th className="p-4 text-xs font-bold text-white/40 uppercase tracking-wider w-1/3">Data Payload</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {loadingWebhooks ? (
+                    <tr>
+                      <td colSpan={4} className="p-8 text-center text-white/40">
+                        <RefreshCw className="w-6 h-6 animate-spin mx-auto opacity-50" />
+                      </td>
+                    </tr>
+                  ) : webhookLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="p-12 text-center">
+                        <Activity className="w-12 h-12 text-white/10 mx-auto mb-3" />
+                        <p className="text-white/40 text-sm">No webhook logs available.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    webhookLogs
+                      .filter(l => (l.message || '').toLowerCase().includes(searchQuery.toLowerCase()))
+                      .map((log, idx) => (
+                      <tr key={log.id || idx} className="hover:bg-white/5 transition-colors group">
+                        <td className="p-4 whitespace-nowrap text-xs text-white/50 font-mono">
+                          {new Date(log.timestamp).toLocaleString()}
+                        </td>
+                        <td className="p-4">
+                          <div className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border mb-1
+                            ${log.success ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-red-500/20 text-red-300 border-red-500/30'}`}
+                          >
+                            {log.type}
+                          </div>
+                        </td>
+                        <td className="p-4 text-sm text-white/80">
+                          {log.message}
+                        </td>
+                        <td className="p-4">
+                          {log.data ? (
+                            <pre className="text-[10px] text-white/40 font-mono max-h-24 overflow-y-auto bg-black/40 p-2 rounded-lg border border-white/5">
+                              {JSON.stringify(log.data, null, 2)}
+                            </pre>
+                          ) : (
+                            <span className="text-xs text-white/20 italic">No data</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead>
                 <tr className="border-b border-white/10 bg-black/20">
                   <th className="p-4 text-xs font-bold text-white/40 uppercase tracking-wider">Order & Tracking</th>
                   <th className="p-4 text-xs font-bold text-white/40 uppercase tracking-wider">Customer Info</th>
@@ -277,7 +413,7 @@ export default function LiveDeliveryFeed() {
                           <div className="text-sm font-bold text-white/90">{order.customer_name}</div>
                           <div className="text-xs text-white/50 font-mono mt-0.5">{order.phone}</div>
                           <div className="text-xs text-white/40 mt-1 line-clamp-1 max-w-[200px]">
-                            {order.wilaya}{order.commune ? `, ${order.commune}` : ''}
+                            {order.wilaya}{order.baladia ? `, ${order.baladia}` : ''}
                           </div>
                         </td>
                         <td className="p-4">
@@ -301,6 +437,9 @@ export default function LiveDeliveryFeed() {
                         <td className="p-4">
                           <div className="text-sm font-bold text-emerald-400">
                             {order.total_price} DA
+                          </div>
+                          <div className="text-[10px] text-white/50 mt-1">
+                            Sub: {(order.items?.reduce((sum: number, item: any) => sum + ((item.price || 0) * (item.qty || 1)), 0) || 0).toFixed(0)} DA
                           </div>
                           <div className="text-[10px] text-white/40 mt-0.5">
                             {Array.isArray(order.items) ? `${order.items.length} item(s)` : 'Unknown'}
@@ -336,6 +475,7 @@ export default function LiveDeliveryFeed() {
                 )}
               </tbody>
             </table>
+            )}
           </div>
         </div>
       </div>
