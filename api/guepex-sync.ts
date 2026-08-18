@@ -139,7 +139,7 @@ export default async function handler(req: any, res: any) {
           if (centersList.length > 0) {
             let chosenCenter = null;
             if (stopdesk_id) {
-              chosenCenter = centersList.find((c: any) => Number(c.center_id) === Number(stopdesk_id));
+              chosenCenter = centersList.find((c: any) => Number(c.center_id || c.id) === Number(stopdesk_id));
             }
             if (!chosenCenter) {
               const normalize = (str: string) => (str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -150,7 +150,7 @@ export default async function handler(req: any, res: any) {
               ) || centersList[0];
             }
             if (chosenCenter) {
-              stopdesk_id = Number(chosenCenter.center_id);
+              stopdesk_id = Number(chosenCenter.center_id || chosenCenter.id);
               if (chosenCenter.commune_name) {
                 // FORCE the commune name to follow the chosen agency
                 final_commune_name = chosenCenter.commune_name;
@@ -164,14 +164,9 @@ export default async function handler(req: any, res: any) {
         console.error("Failed to fetch stopdesk center:", e);
       }
     } else {
-      const chefLieu = getChefLieu(to_wilaya_name);
-      if (chefLieu && chefLieu.toLowerCase() !== to_commune_name.toLowerCase()) {
-        final_commune_name = chefLieu;
-        const communePrefix = `${to_commune_name}, `;
-        if (!address.toLowerCase().includes(to_commune_name.toLowerCase())) {
-          final_address = `${communePrefix}${address}`;
-        }
-      }
+      // Direct home delivery order: use exact selected commune name
+      final_commune_name = to_commune_name;
+      final_address = address;
     }
 
     const parcel = {
@@ -188,7 +183,7 @@ export default async function handler(req: any, res: any) {
       do_insurance: true,
       declared_value: Number(price),
       is_oversized: false,
-      freeshipping: false,
+      freeshipping: true,
       is_stopdesk: Boolean(is_stopdesk || stopdesk_id),
       economic: 1,
       ...(stopdesk_id && { stopdesk_id: Number(stopdesk_id) }),
