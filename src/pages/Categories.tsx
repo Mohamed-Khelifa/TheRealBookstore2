@@ -13,7 +13,7 @@ export default function Categories() {
 
   useEffect(() => {
     const fetchBooks = async () => {
-      const { data } = await fetchAllRows('books', '*', 'created_at', false);
+      const { data } = await fetchAllRows('books', 'id, title, author, price, old_price, cover_image_url, categories, stock, featured, rating, created_at, is_bundle, bundle_books', 'created_at', false);
       if (data) setBooks(data);
     };
     fetchBooks();

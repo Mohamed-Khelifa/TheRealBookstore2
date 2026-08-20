@@ -53,6 +53,15 @@ export default function Checkout() {
   const [checkoutCoverNote, setCheckoutCoverNote] = useState<string>(DEFAULT_CHECKOUT_COVER_NOTE);
 
   
+
+  useEffect(() => {
+    if (formData.email) localStorage.setItem('bigdeal_user_email', formData.email);
+    if (formData.phone) localStorage.setItem('bigdeal_user_phone', formData.phone);
+    if (formData.full_name) localStorage.setItem('bigdeal_user_name', formData.full_name);
+    if (formData.wilaya) localStorage.setItem('bigdeal_user_wilaya', formData.wilaya);
+    if (formData.baladia) localStorage.setItem('bigdeal_user_baladia', formData.baladia);
+  }, [formData.email, formData.phone, formData.full_name, formData.wilaya, formData.baladia]);
+
   useEffect(() => {
     const map = formData.shipping_method === 'office' ? allStopdeskCommunes : allWilayaCommunes;
     const currentMap = (map && Object.keys(map).length > 0) ? map : (formData.shipping_method === 'office' ? DEFAULT_STOPDESK_COMMUNES : DEFAULT_WILAYA_COMMUNES);

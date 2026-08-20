@@ -38,8 +38,39 @@ export function generateEventId(prefix: string = 'evt'): string {
   return `${prefix}_${Date.now()}_${rand}`;
 }
 
+export async function hashMetaValue(val: string): Promise<string> {
+  if (!val) return '';
+  const trimmed = val.trim().toLowerCase();
+  if (/^[a-f0-9]{64}$/.test(trimmed)) {
+    return trimmed;
+  }
+  const msgUint8 = new TextEncoder().encode(trimmed);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function normalizePhone(phone: string): string {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('213')) return digits;
+  if (digits.startsWith('0')) return '213' + digits.slice(1);
+  if (digits.length === 9) return '213' + digits;
+  return digits;
+}
+
+export interface UserDataParams {
+  email?: string;
+  phone?: string;
+  full_name?: string;
+  wilaya?: string;
+  baladia?: string;
+  fbp?: string;
+  fbc?: string;
+}
+
 // Ensure window.fbq is initialized
-export function initMetaPixel(pixelId: string = DEFAULT_PIXEL_ID): void {
+export async function initMetaPixel(pixelId: string = DEFAULT_PIXEL_ID, userData: UserDataParams = {}): Promise<void> {
   if (typeof window === 'undefined') return;
 
   if (!(window as any).fbq) {
@@ -68,24 +99,72 @@ export function initMetaPixel(pixelId: string = DEFAULT_PIXEL_ID): void {
     }
   }
 
+  // Pass Advanced Matching to fbq('init')
+  const mergedData = await getEnrichedUserData(userData);
+  const advancedMatching: Record<string, string> = {};
+  
+  if (mergedData.email) advancedMatching.em = mergedData.email; // Already hashed by getEnrichedUserData
+  if (mergedData.phone) advancedMatching.ph = mergedData.phone;
+  if (mergedData.fbp) advancedMatching.fbp = mergedData.fbp;
+  if (mergedData.fbc) advancedMatching.fbc = mergedData.fbc;
+  if (mergedData.full_name) {
+     const parts = mergedData.full_name.trim().toLowerCase().split(/\s+/);
+     const fn = parts[0] || '';
+     const ln = parts.slice(1).join(' ') || fn;
+     if (fn) advancedMatching.fn = await hashMetaValue(fn);
+     if (ln) advancedMatching.ln = await hashMetaValue(ln);
+  }
+  if (mergedData.baladia) {
+    const cleanBaladia = mergedData.baladia.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (cleanBaladia) advancedMatching.ct = await hashMetaValue(cleanBaladia);
+  }
+  if (mergedData.wilaya) {
+    const cleanWilaya = mergedData.wilaya.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (cleanWilaya) advancedMatching.st = await hashMetaValue(cleanWilaya);
+  }
+
+  // Always set DZ country
+  advancedMatching.country = await hashMetaValue('dz');
+
   if (!(window as any)._fbq_initialized) {
     try {
-      (window as any).fbq('init', pixelId);
+      if (Object.keys(advancedMatching).length > 0) {
+        (window as any).fbq('init', pixelId, advancedMatching);
+      } else {
+        (window as any).fbq('init', pixelId);
+      }
       (window as any)._fbq_initialized = true;
     } catch (e) {
       console.warn('[Meta Pixel] Init warning:', e);
     }
+  } else {
+    // If already initialized, we can still push advanced matching data
+    // fbq('set', 'autoConfig', false, pixelId);
+    // fbq('init', pixelId, advancedMatching);
   }
 }
 
-export interface UserDataParams {
-  email?: string;
-  phone?: string;
-  full_name?: string;
-  wilaya?: string;
-  baladia?: string;
-  fbp?: string;
-  fbc?: string;
+export async function getEnrichedUserData(provided: UserDataParams = {}): Promise<UserDataParams> {
+  if (typeof window === 'undefined') return provided;
+  
+  const rawEmail = provided.email || localStorage.getItem('bigdeal_user_email') || '';
+  const rawPhone = provided.phone || localStorage.getItem('bigdeal_user_phone') || '';
+  const rawName = provided.full_name || localStorage.getItem('bigdeal_user_name') || '';
+  const rawWilaya = provided.wilaya || localStorage.getItem('bigdeal_user_wilaya') || '';
+  const rawBaladia = provided.baladia || localStorage.getItem('bigdeal_user_baladia') || '';
+
+  const userData: UserDataParams = { ...provided };
+  
+  if (rawEmail) userData.email = await hashMetaValue(rawEmail);
+  if (rawPhone) userData.phone = await hashMetaValue(normalizePhone(rawPhone));
+  if (rawName) userData.full_name = rawName; // Pass raw name here so initMetaPixel and CAPI can split to fn/ln
+  if (rawWilaya) userData.wilaya = rawWilaya;
+  if (rawBaladia) userData.baladia = rawBaladia;
+  
+  userData.fbp = provided.fbp || getFbpCookie();
+  userData.fbc = provided.fbc || getFbcCookie();
+  
+  return userData;
 }
 
 export interface TrackEventOptions {
@@ -115,19 +194,14 @@ export async function trackMetaEvent({
 
   // 2. Server-Side Conversions API (CAPI) Tracking
   try {
-    const fbp = userData.fbp || getFbpCookie();
-    const fbc = userData.fbc || getFbcCookie();
+    const enrichedUserData = await getEnrichedUserData(userData);
 
     const payload = {
       event_name: eventName,
       event_id: activeEventId,
       event_source_url: typeof window !== 'undefined' ? window.location.href : '',
       custom_data: customData,
-      user_data: {
-        ...userData,
-        fbp,
-        fbc
-      }
+      user_data: enrichedUserData
     };
 
     fetch('/api/meta-capi', {
@@ -162,7 +236,6 @@ export function trackPageView(url?: string): Promise<string> {
 export function trackViewContent(book: { id?: string; title?: string; price?: number }): Promise<string> {
   const price = Number(book.price || 0);
   const bookId = String(book.id || 'book_item');
-
   return trackMetaEvent({
     eventName: 'ViewContent',
     customData: {
@@ -178,7 +251,6 @@ export function trackViewContent(book: { id?: string; title?: string; price?: nu
 export function trackAddToCart(book: { id?: string; title?: string; price?: number }, qty: number = 1): Promise<string> {
   const price = Number(book.price || 0);
   const bookId = String(book.id || 'book_item');
-
   return trackMetaEvent({
     eventName: 'AddToCart',
     customData: {
@@ -199,7 +271,6 @@ export function trackInitiateCheckout(items: any[], total: number): Promise<stri
     quantity: Number(i.qty || 1),
     item_price: Number(i.price || 0)
   }));
-
   return trackMetaEvent({
     eventName: 'InitiateCheckout',
     customData: {
@@ -215,7 +286,6 @@ export function trackInitiateCheckout(items: any[], total: number): Promise<stri
 
 export function trackAddPaymentInfo(items: any[], total: number, userData?: UserDataParams): Promise<string> {
   const contentIds = items.map(i => String(i.book_id || i.id || 'item'));
-
   return trackMetaEvent({
     eventName: 'AddPaymentInfo',
     customData: {

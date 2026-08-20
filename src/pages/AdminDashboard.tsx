@@ -36,6 +36,7 @@ export default function AdminDashboard({ user }: { user: User | null }) {
 
   useEffect(() => {
     const fetchNewCounts = async () => {
+      if (document.hidden) return;
       const lastSeenOrders = localStorage.getItem('admin_last_seen_orders') || new Date(0).toISOString();
       const lastSeenReviews = localStorage.getItem('admin_last_seen_reviews') || new Date(0).toISOString();
       const lastSeenRequests = localStorage.getItem('admin_last_seen_requests') || new Date(0).toISOString();
@@ -58,7 +59,7 @@ export default function AdminDashboard({ user }: { user: User | null }) {
     };
 
     fetchNewCounts();
-    const interval = setInterval(fetchNewCounts, 30000);
+    const interval = setInterval(fetchNewCounts, 60000);
     return () => clearInterval(interval);
   }, [location.pathname]);
 
@@ -314,6 +315,9 @@ function ManageBooks() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showDuplicates, setShowDuplicates] = useState(false);
+  const [showBrokenImages, setShowBrokenImages] = useState(false);
+  const [scanningImages, setScanningImages] = useState(false);
+  const [brokenImageIds, setBrokenImageIds] = useState<Set<string>>(new Set());
   const [bundleSearchQuery, setBundleSearchQuery] = useState('');
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -340,7 +344,44 @@ function ManageBooks() {
     }
   };
 
+  const scanBrokenImages = async () => {
+    if (showBrokenImages) {
+      setShowBrokenImages(false);
+      return;
+    }
+    setScanningImages(true);
+    const brokenIds = new Set<string>();
+    
+    const testImage = (url: string): Promise<boolean> => {
+      return new Promise((resolve) => {
+        if (!url || typeof url !== 'string' || !url.trim() || !url.startsWith('http')) {
+          resolve(false);
+          return;
+        }
+        const img = new Image();
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+        img.src = url;
+      });
+    };
+
+    // Scan all books in batches of 20
+    const batchSize = 20;
+    for (let i = 0; i < books.length; i += batchSize) {
+      const batch = books.slice(i, i + batchSize);
+      await Promise.all(batch.map(async (book) => {
+        const isValid = await testImage(book.cover_image_url);
+        if (!isValid) brokenIds.add(book.id);
+      }));
+    }
+    
+    setBrokenImageIds(brokenIds);
+    setShowBrokenImages(true);
+    setScanningImages(false);
+  };
+
   const filteredBooks = (books || []).filter(b => {
+    if (showBrokenImages && !brokenImageIds.has(b.id)) return false;
     const title = (b.title || '').toLowerCase();
     const author = (b.author || '').toLowerCase();
     const query = (searchQuery || '').toLowerCase();
@@ -368,7 +409,7 @@ function ManageBooks() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, showDuplicates]);
+  }, [searchQuery, showDuplicates, showBrokenImages]);
 
   const totalPages = Math.ceil(finalFilteredBooks.length / itemsPerPage);
   const paginatedBooks = finalFilteredBooks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -488,6 +529,15 @@ function ManageBooks() {
           >
             <Copy className="w-4 h-4" />
             <span className="hidden sm:inline">Duplicates</span>
+          </button>
+          <button 
+            onClick={scanBrokenImages}
+            disabled={scanningImages}
+            className={`flex items-center space-x-2 px-4 py-3 rounded-xl transition-all font-bold ${showBrokenImages ? 'bg-red-500/20 text-red-400 border border-red-500/30 shadow-lg shadow-red-500/10' : 'bg-white/10 text-white hover:bg-white/20'} ${scanningImages ? 'opacity-50 cursor-not-allowed' : ''}`}
+            title="Find books with broken image URLs"
+          >
+            {scanningImages ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            <span className="hidden sm:inline">{scanningImages ? 'Scanning...' : 'Broken Images'}</span>
           </button>
           <button 
             onClick={() => setIsAdjustingPrices(true)}
@@ -1716,17 +1766,13 @@ function ManageOrders() {
                            headers: { 'Content-Type': 'application/json' },
                            body: JSON.stringify({
                              order_id: order.id,
-                             firstname: order.customer_name.split(' ')[0] || 'Client',
-                             familyname: order.customer_name.split(' ').slice(1).join(' ') || '.',
+                             firstname: ((order.customer_name || '').replace(/\(IG: @?[^)]+\)/gi, '').replace(/\(Alt: [^)]+\)/gi, '').trim().split(' ')[0]) || 'Client',
+                             familyname: ((order.customer_name || '').replace(/\(IG: @?[^)]+\)/gi, '').replace(/\(Alt: [^)]+\)/gi, '').trim().split(' ').slice(1).join(' ')) || '.',
                              contact_phone: order.phone,
                              address: `${order.wilaya}, ${order.baladia}`,
                              to_commune_name: order.baladia,
                              to_wilaya_name: order.wilaya,
-                             price: (() => {
-                               const rate = getEconomicRate(order.wilaya) || shippingRates.find(r => r.wilaya.toLowerCase().trim() === order.wilaya.toLowerCase().trim());
-                               const shippingCost = rate ? (order.shipping_method === 'office' ? rate.office_pickup_rate : rate.rate_per_item) : 0;
-                               return Math.max(0, (order.total_price || 0) - shippingCost);
-                             })(),
+                             price: Math.max(0, order.total_price || 0),
                              product_list: order.items.map((i:any) => `${i.qty}x ${i.title}`).join(', '),
                              is_stopdesk: order.shipping_method === 'office',
                              stopdesk_id: null // Will be auto-resolved in backend

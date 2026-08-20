@@ -13,9 +13,15 @@ const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY') || getEnv('SUPABASE_ANO
 
 const supabase = (supabaseUrl && supabaseAnonKey) ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
-function hashSha256(val: string): string {
+function isSha256(val: string): boolean {
+  return /^[a-f0-9]{64}$/i.test(val);
+}
+
+function processHash(val: string): string {
   if (!val) return '';
-  return crypto.createHash('sha256').update(val.trim().toLowerCase()).digest('hex');
+  const trimmed = val.trim().toLowerCase();
+  if (isSha256(trimmed)) return trimmed;
+  return crypto.createHash('sha256').update(trimmed).digest('hex');
 }
 
 function normalizePhone(phone: string): string {
@@ -64,13 +70,13 @@ export default async function handler(req: any, res: any) {
     const hashedUserData: Record<string, any> = {};
 
     if (user_data?.email) {
-      hashedUserData.em = [hashSha256(user_data.email)];
+      hashedUserData.em = [processHash(user_data.email)];
     }
 
     if (user_data?.phone) {
       const cleanPh = normalizePhone(user_data.phone);
       if (cleanPh) {
-        hashedUserData.ph = [hashSha256(cleanPh)];
+        hashedUserData.ph = [processHash(cleanPh)];
       }
     }
 
@@ -78,22 +84,22 @@ export default async function handler(req: any, res: any) {
       const parts = user_data.full_name.trim().toLowerCase().split(/\s+/);
       const fn = parts[0] || '';
       const ln = parts.slice(1).join(' ') || fn;
-      if (fn) hashedUserData.fn = [hashSha256(fn)];
-      if (ln) hashedUserData.ln = [hashSha256(ln)];
+      if (fn) hashedUserData.fn = [processHash(fn)];
+      if (ln) hashedUserData.ln = [processHash(ln)];
     }
 
     if (user_data?.baladia) {
       const cleanBaladia = user_data.baladia.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (cleanBaladia) hashedUserData.ct = [hashSha256(cleanBaladia)];
+      if (cleanBaladia) hashedUserData.ct = [processHash(cleanBaladia)];
     }
 
     if (user_data?.wilaya) {
       const cleanWilaya = user_data.wilaya.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (cleanWilaya) hashedUserData.st = [hashSha256(cleanWilaya)];
+      if (cleanWilaya) hashedUserData.st = [processHash(cleanWilaya)];
     }
 
     // Always include country hash for DZ (Algeria)
-    hashedUserData.country = [hashSha256('dz')];
+    hashedUserData.country = [processHash('dz')];
 
     // Client IP & User Agent
     const clientIp = req.headers?.['x-forwarded-for']

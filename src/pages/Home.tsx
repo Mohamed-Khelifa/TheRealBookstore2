@@ -162,7 +162,7 @@ export default function Home() {
       // 1. Instantly fetch initial 50 books for immediate page rendering
       const { data: initialBooks } = await supabase
         .from('books')
-        .select('*')
+        .select('id, title, author, price, old_price, cover_image_url, categories, stock, featured, rating, created_at, is_bundle, bundle_books')
         .order('created_at', { ascending: false })
         .range(0, 49);
 
@@ -204,7 +204,7 @@ export default function Home() {
       setTimeout(async () => {
         const { data: fullBooks } = await fetchAllRows(
           'books',
-          '*',
+          'id, title, author, price, old_price, cover_image_url, categories, stock, featured, rating, created_at, is_bundle, bundle_books',
           'created_at',
           false
         );

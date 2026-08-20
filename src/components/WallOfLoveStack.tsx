@@ -51,7 +51,7 @@ export function WallOfLoveStack({ screenshots }: { screenshots: any[] }) {
           const isFront = i === 0;
           return (
             <motion.div
-              key={card.id + (isFront ? '-front' : '')}
+              key={card.id}
               className="absolute top-8 w-full h-[450px] rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl bg-white/5 cursor-grab active:cursor-grabbing origin-bottom"
               style={{
                 zIndex: cards.length - i,
