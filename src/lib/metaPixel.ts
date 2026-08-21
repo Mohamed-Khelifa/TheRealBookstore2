@@ -15,6 +15,27 @@ export function getCookie(name: string): string | null {
   return null;
 }
 
+export function getOrCreateExternalId(): string {
+  if (typeof window === 'undefined') return '';
+  let extId = localStorage.getItem('bigdeal_external_id');
+  if (!extId) {
+    extId = 'usr_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    localStorage.setItem('bigdeal_external_id', extId);
+  }
+  return extId;
+}
+
+export function getOrCreateFbp(): string | undefined {
+  let fbp = getCookie('_fbp');
+  if (!fbp && typeof document !== 'undefined') {
+    const creationTime = Date.now();
+    const rand = Math.floor(Math.random() * 10000000000);
+    fbp = `fb.1.${creationTime}.${rand}`;
+    document.cookie = `_fbp=${fbp}; path=/; max-age=7776000; SameSite=Lax`;
+  }
+  return fbp;
+}
+
 export function getFbpCookie(): string | undefined {
   return getCookie('_fbp') || undefined;
 }
@@ -67,6 +88,7 @@ export interface UserDataParams {
   baladia?: string;
   fbp?: string;
   fbc?: string;
+  external_id?: string;
 }
 
 // Ensure window.fbq is initialized
@@ -123,6 +145,10 @@ export async function initMetaPixel(pixelId: string = DEFAULT_PIXEL_ID, userData
     if (cleanWilaya) advancedMatching.st = await hashMetaValue(cleanWilaya);
   }
 
+  if (mergedData.external_id) {
+    advancedMatching.external_id = await hashMetaValue(mergedData.external_id);
+  }
+
   // Always set DZ country
   advancedMatching.country = await hashMetaValue('dz');
 
@@ -161,8 +187,9 @@ export async function getEnrichedUserData(provided: UserDataParams = {}): Promis
   if (rawWilaya) userData.wilaya = rawWilaya;
   if (rawBaladia) userData.baladia = rawBaladia;
   
-  userData.fbp = provided.fbp || getFbpCookie();
+  userData.fbp = provided.fbp || getOrCreateFbp();
   userData.fbc = provided.fbc || getFbcCookie();
+  userData.external_id = provided.external_id || getOrCreateExternalId();
   
   return userData;
 }

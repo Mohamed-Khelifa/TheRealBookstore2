@@ -26,6 +26,8 @@ function processHash(val: string): string {
 
 function normalizePhone(phone: string): string {
   if (!phone) return '';
+  if (isSha256(phone.trim().toLowerCase())) return phone.trim().toLowerCase();
+  
   const digits = phone.replace(/\D/g, '');
   if (digits.startsWith('213')) return digits;
   if (digits.startsWith('0')) return '213' + digits.slice(1);
@@ -102,15 +104,22 @@ export default async function handler(req: any, res: any) {
     hashedUserData.country = [processHash('dz')];
 
     // Client IP & User Agent
-    const clientIp = req.headers?.['x-forwarded-for']
-      ? String(req.headers['x-forwarded-for']).split(',')[0].trim()
-      : req.socket?.remoteAddress || req.connection?.remoteAddress;
+    const clientIp = 
+      req.headers?.['cf-connecting-ip'] || 
+      req.headers?.['x-real-ip'] || 
+      (req.headers?.['x-forwarded-for'] ? String(req.headers['x-forwarded-for']).split(',')[0].trim() : null) || 
+      req.socket?.remoteAddress || 
+      req.connection?.remoteAddress;
 
     if (clientIp) hashedUserData.client_ip_address = clientIp;
     if (req.headers?.['user-agent']) hashedUserData.client_user_agent = req.headers['user-agent'];
 
     if (user_data?.fbp) hashedUserData.fbp = user_data.fbp;
     if (user_data?.fbc) hashedUserData.fbc = user_data.fbc;
+    
+    if (user_data?.external_id) {
+      hashedUserData.external_id = [processHash(user_data.external_id)];
+    }
 
     const eventPayload: any = {
       event_name,
