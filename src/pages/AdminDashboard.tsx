@@ -468,7 +468,7 @@ function ManageBooks() {
       if (fetchError) throw fetchError;
 
       if (allBooks && allBooks.length > 0) {
-        const updates = allBooks.map(book => ({
+        const updates = allBooks.map((book, idx) => ({
           ...book,
           price: Math.max(0, book.price + priceAdjustment)
         }));
@@ -680,9 +680,9 @@ function ManageBooks() {
                           return title.includes(query) || author.includes(query);
                         })
                         .slice(0, 50)
-                        .map(book => (
+                        .map((book, idx) => (
                           <div 
-                            key={book.id} 
+                            key={`${book.id}-${idx}`} 
                             onClick={() => {
                               const current = editingBook.bundle_books || [];
                               const next = current.includes(book.id) 
@@ -737,8 +737,8 @@ function ManageBooks() {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {paginatedBooks.map(book => (
-              <tr key={book.id} className="group hover:bg-white/5 transition-colors">
+            {paginatedBooks.map((book, idx) => (
+              <tr key={`${book.id}-${idx}`} className="group hover:bg-white/5 transition-colors">
                 <td className="py-4">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-14 rounded overflow-hidden shadow-lg bg-white/5 relative">
@@ -2784,8 +2784,8 @@ function ManageFeatured() {
           <div className="text-center py-12 text-white/40">Loading...</div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featuredBooks.map(book => (
-              <div key={book.id} className="bg-white/5 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 flex gap-6 group hover:bg-white/[0.07] transition-all shadow-xl">
+            {featuredBooks.map((book, idx) => (
+              <div key={`${book.id}-${idx}`} className="bg-white/5 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 flex gap-6 group hover:bg-white/[0.07] transition-all shadow-xl">
                 <LazyImage src={book.cover_image_url} className="w-20 h-28 object-cover rounded-xl shadow-lg group-hover:scale-105 transition-transform" alt="" />
                 <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
                   <div>
@@ -2829,8 +2829,8 @@ function ManageFeatured() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {availableBooks.slice(0, 9).map(book => (
-            <div key={book.id} className="bg-white/5 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 flex gap-6 hover:border-white/30 transition-all group shadow-lg">
+          {availableBooks.slice(0, 9).map((book, idx) => (
+            <div key={`${book.id}-${idx}`} className="bg-white/5 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 flex gap-6 hover:border-white/30 transition-all group shadow-lg">
               <LazyImage src={book.cover_image_url} className="w-20 h-28 object-cover rounded-xl shadow-lg group-hover:scale-105 transition-transform" alt="" />
               <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
                 <div>
@@ -2938,7 +2938,7 @@ function ManageDiscounts() {
       if (fetchError) throw fetchError;
 
       if (books) {
-        const updates = books.map(book => ({
+        const updates = books.map((book, idx) => ({
           ...book,
           old_price: book.price,
           price: Math.round(book.price * (1 - globalSalePercent / 100))
@@ -2968,7 +2968,7 @@ function ManageDiscounts() {
       if (books) {
         const updates = books
           .filter(book => book.old_price && book.old_price > 0)
-          .map(book => ({
+          .map((book, idx) => ({
             ...book,
             price: book.old_price,
             old_price: 0
@@ -3545,10 +3545,10 @@ function ManageInventory() {
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-              {paginatedBooks.map((book) => {
+              {paginatedBooks.map((book, idx) => {
                 const inInventory = inventoryIds.includes(book.id);
                 return (
-                  <div key={book.id} className={`group relative bg-ink rounded-2xl overflow-hidden border transition-all duration-300 ${inInventory ? 'border-primary shadow-[0_0_20px_rgba(139,92,246,0.3)] ring-1 ring-primary/50' : 'border-white/10 hover:border-white/30'}`}>
+                  <div key={`${book.id}-${idx}`} className={`group relative bg-ink rounded-2xl overflow-hidden border transition-all duration-300 ${inInventory ? 'border-primary shadow-[0_0_20px_rgba(139,92,246,0.3)] ring-1 ring-primary/50' : 'border-white/10 hover:border-white/30'}`}>
                     <div className="aspect-[2/3] relative">
                       <LazyImage src={book.cover_image_url} alt={book.title} className={`w-full h-full object-cover transition-transform duration-500 ${inInventory ? 'scale-105' : 'group-hover:scale-105'}`} />
                       <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/20 to-transparent" />

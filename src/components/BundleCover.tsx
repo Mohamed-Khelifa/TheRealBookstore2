@@ -88,7 +88,7 @@ export const BundleCover: React.FC<BundleCoverProps> = ({ bundleBookIds, allBook
 
         return (
           <motion.div
-            key={book.id}
+            key={`${book.id}-${index}`}
             initial={{ opacity: 0, scale: 0.5 }}
             animate={{ 
               opacity: 1, 

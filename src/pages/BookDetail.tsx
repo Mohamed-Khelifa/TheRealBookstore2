@@ -290,8 +290,8 @@ export default function BookDetail() {
                 <h3 className="text-lg font-serif font-bold text-white">Bundle Includes</h3>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {bundleBooks.map(b => (
-                  <div key={b.id} onClick={() => navigate(`/book/${b.id}`)} className="flex items-center space-x-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all cursor-pointer group">
+                {bundleBooks.map((b, index) => (
+                  <div key={`${b.id}-${index}`} onClick={() => navigate(`/book/${b.id}`)} className="flex items-center space-x-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all cursor-pointer group">
                     <div className="w-12 h-16 rounded-lg overflow-hidden shadow-lg flex-shrink-0">
                       <LazyImage src={b.cover_image_url} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                     </div>

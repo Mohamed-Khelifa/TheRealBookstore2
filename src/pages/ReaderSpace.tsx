@@ -62,7 +62,7 @@ export default function ReaderSpace() {
   }, [isLoggedIn]);
 
   const fetchBooks = async () => {
-    const { data } = await fetchAllRows('books', 'id, title, author, price, old_price, cover_image_url, categories, stock, featured, rating, created_at, is_bundle, bundle_books', 'created_at', false);
+    const { data } = await supabase.from('books').select('*').order('created_at', { ascending: false }).limit(50);
     if (data) {
       const booksMap: Record<string, Book> = {};
       data.forEach(b => booksMap[b.id] = b);

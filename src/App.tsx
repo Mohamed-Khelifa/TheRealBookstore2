@@ -270,9 +270,9 @@ export default function App() {
                     <div className="p-4 text-center text-white/40 text-sm">Searching...</div>
                   ) : searchResults.length > 0 ? (
                     <div className="py-2">
-                      {searchResults.map(book => (
+                      {searchResults.map((book, idx) => (
                         <Link
-                          key={book.id}
+                          key={`${book.id}-${idx}`}
                           to={`/book/${book.id}`}
                           onClick={() => {
                             setSearchQuery('');
@@ -440,9 +440,9 @@ export default function App() {
                         exit={{ opacity: 0, y: 10 }}
                         className="mt-2 bg-white/5 rounded-2xl border border-white/10 overflow-hidden max-h-[40vh] overflow-y-auto"
                       >
-                        {searchResults.map(book => (
+                        {searchResults.map((book, idx) => (
                           <Link
-                            key={book.id}
+                            key={`${book.id}-${idx}`}
                             to={`/book/${book.id}`}
                             onClick={() => {
                               setSearchQuery('');

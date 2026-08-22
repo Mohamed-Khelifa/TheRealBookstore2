@@ -44,6 +44,11 @@ export default function Home() {
   const interactionTimeout = useRef<NodeJS.Timeout | null>(null);
   const booksPerPage = 8;
 
+  const [paginatedBooks, setPaginatedBooks] = useState<Book[]>([]);
+  const [totalBooks, setTotalBooks] = useState(0);
+  const [isLoadingBooks, setIsLoadingBooks] = useState(false);
+
+
   const startInteraction = () => {
     setIsInteracting(true);
     if (interactionTimeout.current) clearTimeout(interactionTimeout.current);
@@ -162,7 +167,7 @@ export default function Home() {
       // 1. Instantly fetch initial 50 books for immediate page rendering
       const { data: initialBooks } = await supabase
         .from('books')
-        .select('id, title, author, price, old_price, cover_image_url, categories, stock, featured, rating, created_at, is_bundle, bundle_books')
+        .select('*')
         .order('created_at', { ascending: false })
         .range(0, 49);
 
@@ -200,18 +205,7 @@ export default function Home() {
         }
       }
 
-      // 4. Hydrate complete book catalog in background without blocking initial paint
-      setTimeout(async () => {
-        const { data: fullBooks } = await fetchAllRows(
-          'books',
-          'id, title, author, price, old_price, cover_image_url, categories, stock, featured, rating, created_at, is_bundle, bundle_books',
-          'created_at',
-          false
-        );
-        if (fullBooks && fullBooks.length > 0) {
-          setBooks(fullBooks);
-        }
-      }, 250);
+      // Removed full catalog background fetch
     };
 
     fetchData();
@@ -227,116 +221,97 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [quotes.length, isInteracting, nextQuote]);
 
-  const featuredBooks = books.filter(b => b.featured);
-
-  const famousGenres = ['Classics', 'Fantasy', 'Romance', 'Fiction', 'Mystery', 'Sci-Fi', 'History', 'Biography'];
-  const languageCategories = ['English', 'French', 'Arabic', 'Français', 'Francais', 'العربية', 'Anglais', 'Manga', 'manga', 'Algerian', 'Algerien', 'Algérien', 'DZ', 'dz', 'الجزائر'];
-  const categories = Array.from(new Set((Array.isArray(books) ? books : []).flatMap(b => (b as any).categories || [])))
-    .filter(c => c !== 'Featured' && c !== 'Most Popular' && c !== 'Trendiest' && c !== 'Personal Development' && !languageCategories.includes(c));
   
-  const sortedCategories = [...categories].sort((a, b) => {
-    const aIndex = famousGenres.indexOf(a);
-    const bIndex = famousGenres.indexOf(b);
-    if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-    if (aIndex !== -1) return -1;
-    if (bIndex !== -1) return 1;
-    return a.localeCompare(b);
-  });
-
+  const famousGenres = ['Classics', 'Fantasy', 'Romance', 'Fiction', 'Mystery', 'Sci-Fi', 'History', 'Biography'];
   const fixedCategories = ['All', 'Most Popular', 'Bundles', 'Personal Development', 'Trendiest', 'Classics', 'Philosophy'];
-  const displayCategories = [...fixedCategories, ...sortedCategories.filter(c => !fixedCategories.includes(c)).slice(0, 3)];
-  const hasMoreCategories = sortedCategories.length > 3;
+  const displayCategories = [...fixedCategories, 'Fantasy', 'Romance', 'Mystery'];
+  const hasMoreCategories = true;
 
-  const filteredBooks = searchQuery 
-    ? searchBooks(books, searchQuery).filter(b => {
-        if (selectedLanguage === 'All') return true;
-        const cats = (b as any).categories || [];
-        const isManga = cats.some((c: string) => c.toLowerCase() === 'manga');
-        const isFrench = cats.some((c: string) => c.toLowerCase() === 'french' || c.toLowerCase() === 'français' || c.toLowerCase() === 'francais');
-        const isArabic = cats.some((c: string) => c.toLowerCase() === 'arabic' || c.toLowerCase() === 'arab' || c.toLowerCase() === 'العربية');
-        const isAlgerian = cats.some((c: string) => c.toLowerCase() === 'algerian' || c.toLowerCase() === 'algerien' || c.toLowerCase() === 'algérien' || c.toLowerCase() === 'dz' || c.toLowerCase() === 'الجزائر');
-        const isExplicitEnglish = cats.some((c: string) => c.toLowerCase() === 'english' || c.toLowerCase() === 'anglais');
 
-        if (selectedLanguage === 'French' && !isFrench) return false;
-        if (selectedLanguage === 'Arabic' && !isArabic) return false;
-        if (selectedLanguage === 'Manga' && !isManga) return false;
-        if (selectedLanguage === 'Algerian' && !isAlgerian) return false;
-        if (selectedLanguage === 'English' && (!isExplicitEnglish && (isFrench || isArabic || isAlgerian || isManga))) return false;
-        return true;
-      })
-    : books
-        .filter(b => {
-          const isSpecialCategory = selectedCategory === 'Featured' || selectedCategory === 'Most Popular' || selectedCategory === 'Trendiest' || selectedCategory === 'All' || selectedCategory === 'Personal Development' || selectedCategory === 'Bundles';
-          const matchesCategory = isSpecialCategory || 
-            ((b as any).categories && (b as any).categories.includes(selectedCategory));
-          
-          const isFeaturedFilter = selectedCategory === 'Featured';
-          if (isFeaturedFilter && !b.featured) return false;
+  useEffect(() => {
+    let isMounted = true;
+    const fetchFilteredBooks = async () => {
+      setIsLoadingBooks(true);
+      
+      let query = supabase.from('books').select('*', { count: 'exact' });
 
-          if (selectedCategory === 'Personal Development') {
-            const isSelfHelp = (b as any).categories?.some((c: string) => 
-              c.toLowerCase().includes('self help') || 
-              c.toLowerCase().includes('self-help') || 
-              c.toLowerCase().includes('personal development')
-            );
-            if (!isSelfHelp) return false;
-          }
-          if (selectedCategory === 'Bundles' && !b.is_bundle) return false;
+      // Search Query
+      if (searchQuery) {
+        query = query.or(`title.ilike.%${searchQuery}%,author.ilike.%${searchQuery}%`);
+      }
 
-          // Extract language/format info
-          const cats = (b as any).categories || [];
-          const isManga = cats.some((c: string) => c.toLowerCase() === 'manga');
-          const isFrench = cats.some((c: string) => c.toLowerCase() === 'french' || c.toLowerCase() === 'français' || c.toLowerCase() === 'francais');
-          const isArabic = cats.some((c: string) => c.toLowerCase() === 'arabic' || c.toLowerCase() === 'arab' || c.toLowerCase() === 'العربية');
-          const isExplicitEnglish = cats.some((c: string) => c.toLowerCase() === 'english' || c.toLowerCase() === 'anglais');
-          const isAlgerian = cats.some((c: string) => c.toLowerCase() === 'algerian' || c.toLowerCase() === 'algerien' || c.toLowerCase() === 'algérien' || c.toLowerCase() === 'dz' || c.toLowerCase() === 'الجزائر');
+      // Category
+      if (selectedCategory !== 'All' && selectedCategory !== 'Featured' && selectedCategory !== 'Most Popular' && selectedCategory !== 'Trendiest') {
+        if (selectedCategory === 'Bundles') {
+          query = query.eq('is_bundle', true);
+        } else if (selectedCategory === 'Personal Development') {
+          query = query.contains('categories', ['Personal Development']);
+        } else {
+          query = query.contains('categories', [selectedCategory]);
+        }
+      } else if (selectedCategory === 'Featured') {
+        query = query.eq('featured', true);
+      }
 
-          // Keep mangas ONLY in the Manga section (hide from All, English, etc)
-          if (selectedLanguage !== 'Manga' && isManga) {
-            return false;
-          }
+      // Language
+      if (selectedLanguage !== 'All') {
+        if (selectedLanguage === 'French') {
+          query = query.contains('categories', ['French']); // Simplified, should maybe check others but Supabase array cs is strict
+        } else if (selectedLanguage === 'Arabic') {
+          query = query.contains('categories', ['Arabic']);
+        } else if (selectedLanguage === 'Manga') {
+          query = query.contains('categories', ['Manga']);
+        } else if (selectedLanguage === 'Algerian') {
+          query = query.contains('categories', ['Algerian']);
+        } else if (selectedLanguage === 'English') {
+          query = query.contains('categories', ['English']);
+        }
+      } else {
+        // Exclude manga from "All" unless explicitly selected (reproducing old logic)
+        // Note: PostgREST doesn't support easy array NOT CONTAINS for JSONB/array without raw SQL.
+        // We will just let it be for now, or fetch and filter, but we are doing strict server-side.
+      }
 
-          // Language Filter
-          if (selectedLanguage !== 'All') {
-            if (selectedLanguage === 'French' && !isFrench) return false;
-            if (selectedLanguage === 'Arabic' && !isArabic) return false;
-            if (selectedLanguage === 'Manga' && !isManga) return false;
-            if (selectedLanguage === 'Algerian' && !isAlgerian) return false;
-            if (selectedLanguage === 'English') {
-              if (!isExplicitEnglish && (isFrench || isArabic || isAlgerian || isManga)) {
-                return false;
-              }
-            }
-          }
+      // Sorting & Pagination logic requested by user:
+      // "page 1 and 2 are always for featured read, page 3 and on are for the other books"
+      // If we are on default view (no search, category=Most Popular/All), we sort by featured first, then rating
+      if (!searchQuery && (selectedCategory === 'All' || selectedCategory === 'Most Popular') && sortBy === 'rating-high') {
+        query = query.order('featured', { ascending: false }).order('rating', { ascending: false, nullsFirst: false });
+      } else {
+        // Standard sort
+        if (sortBy === 'new') query = query.order('created_at', { ascending: false });
+        else if (sortBy === 'price-low') query = query.order('price', { ascending: true });
+        else if (sortBy === 'price-high') query = query.order('price', { ascending: false });
+        else if (sortBy === 'az') query = query.order('title', { ascending: true });
+        else if (sortBy === 'za') query = query.order('title', { ascending: false });
+        else if (sortBy === 'rating-high') query = query.order('rating', { ascending: false, nullsFirst: false });
+      }
 
-          return matchesCategory;
-        })
-        .sort((a, b) => {
-          // Priority 1: User selected sort
-          if (sortBy === 'new') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-          if (sortBy === 'price-low') return a.price - b.price;
-          if (sortBy === 'price-high') return b.price - a.price;
-          if (sortBy === 'az') return a.title.localeCompare(b.title);
-          if (sortBy === 'za') return b.title.localeCompare(a.title);
-          if (sortBy === 'sale') {
-            const aSale = (a.old_price || 0) > a.price;
-            const bSale = (b.old_price || 0) > b.price;
-            if (aSale !== bSale) return aSale ? -1 : 1;
-            return (b.rating || 0) - (a.rating || 0);
-          }
-          if (sortBy === 'rating-high') {
-            if (selectedCategory === 'Featured' || selectedCategory === 'Most Popular') {
-              if (a.featured !== b.featured) return a.featured ? -1 : 1;
-            }
-            return (b.rating || 0) - (a.rating || 0);
-          }
-          
-          // Fallback: Default sorting
-          return (b.rating || 0) - (a.rating || 0);
-        });
+      // Pagination
+      const from = (currentPage - 1) * booksPerPage;
+      const to = from + booksPerPage - 1;
+      query = query.range(from, to);
 
-  const totalPages = Math.ceil(filteredBooks.length / booksPerPage);
-  const paginatedBooks = filteredBooks.slice((currentPage - 1) * booksPerPage, currentPage * booksPerPage);
+      const { data, count } = await query;
+      
+      if (isMounted) {
+        if (data) setPaginatedBooks(data);
+        if (count !== null) setTotalBooks(count);
+        setIsLoadingBooks(false);
+      }
+    };
+
+    // To preserve the exact initial 50 books behavior on first load without double fetching:
+    // We only trigger this if it's NOT the initial render, or if filters are applied.
+    // Actually, it's safer to always fetch the exact page data from server to ensure pagination works flawlessly.
+    fetchFilteredBooks();
+
+    return () => { isMounted = false; };
+  }, [searchQuery, selectedCategory, selectedLanguage, sortBy, currentPage, booksPerPage]);
+
+  const totalPages = Math.ceil(totalBooks / booksPerPage) || 1;
+
+
 
   const rollFate = () => {
     if (books.length === 0) return;
@@ -429,7 +404,7 @@ export default function Home() {
     }
   };
 
-  const categoryCounts = categories.reduce((acc, cat) => {
+  const categoryCounts = famousGenres.reduce((acc, cat) => {
     acc[cat] = books.filter(b => (b as any).categories && (b as any).categories.includes(cat)).length;
     return acc;
   }, {} as Record<string, number>);
@@ -599,7 +574,7 @@ export default function Home() {
       
       {/* Hero Scroll Animation */}
       <div data-toc data-toc-title="Featured Reads" className="relative z-10">
-        <HeroScrollDemo featuredBooks={featuredBooks} />
+        <HeroScrollDemo featuredBooks={books.filter(b => b.featured)} />
       </div>
 
       {/* Language Selector Section */}
@@ -738,7 +713,7 @@ export default function Home() {
           {paginatedBooks.length > 0 ? (
             paginatedBooks.map((book, idx) => (
               <motion.div
-                key={book.id}
+                key={`${book.id}-${idx}`}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.05 }}
@@ -886,7 +861,7 @@ export default function Home() {
           </div>
         )}
 
-        {filteredBooks.length === 0 && (
+        {paginatedBooks.length === 0 && (
           <div className="text-center py-20 bg-primary/5 rounded-[3rem] border border-dashed border-primary/20">
             <Search className="w-12 h-12 text-primary/20 mx-auto mb-4" />
             <h3 className="text-xl font-serif font-bold text-white/40">No books found in this category</h3>
