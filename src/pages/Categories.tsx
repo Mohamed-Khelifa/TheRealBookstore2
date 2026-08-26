@@ -11,10 +11,31 @@ export default function Categories() {
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
 
+    const [dynamicCategories, setDynamicCategories] = useState<string[]>([]);
+  
   useEffect(() => {
     const fetchBooks = async () => {
+      // Keep books for counting just out of recent, but it's not fully accurate. To avoid showing '0 Books', we can just hide it for dynamic cats
       const { data } = await supabase.from('books').select('*').order('created_at', { ascending: false }).limit(50);
       if (data) setBooks(data);
+      
+      const { data: catData } = await supabase.from('books').select('categories');
+      if (catData) {
+        const languageCategories = ['English', 'French', 'Arabic', 'Français', 'Francais', 'العربية', 'Anglais', 'Manga', 'manga', 'Algerian', 'Algerien', 'Algérien', 'DZ', 'dz', 'الجزائر'];
+        const extracted = Array.from(new Set(catData.flatMap(b => b.categories || [])))
+          .filter(c => c !== 'Featured' && c !== 'Most Popular' && c !== 'Trendiest' && c !== 'Personal Development' && !languageCategories.includes(c));
+        
+        const sorted = [...extracted].sort((a, b) => {
+          const famousGenres = ['Classics', 'Fantasy', 'Romance', 'Fiction', 'Mystery', 'Sci-Fi', 'History', 'Biography'];
+          const aIndex = famousGenres.indexOf(a);
+          const bIndex = famousGenres.indexOf(b);
+          if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+          if (aIndex !== -1) return -1;
+          if (bIndex !== -1) return 1;
+          return a.localeCompare(b);
+        });
+        setDynamicCategories(sorted);
+      }
     };
     fetchBooks();
     window.scrollTo(0, 0);
@@ -113,7 +134,7 @@ export default function Categories() {
               
               <div className="relative z-10 flex items-center justify-between w-full mt-4">
                 <span className="text-sm font-medium text-white/40 group-hover:text-white/60 transition-colors">
-                  {bookCount} {bookCount === 1 ? 'Book' : 'Books'}
+                  {bookCount > 0 ? `${bookCount} ${bookCount === 1 ? 'Book' : 'Books'}` : 'View Collection'}
                 </span>
                 <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
                   <ChevronRight className="w-4 h-4" />

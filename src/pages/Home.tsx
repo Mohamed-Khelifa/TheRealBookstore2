@@ -19,6 +19,7 @@ import { trackAddToCart } from '../lib/metaPixel';
 export default function Home() {
   const { addItem } = useCart();
   const [books, setBooks] = useState<Book[]>([]);
+  const [featuredBooks, setFeaturedBooks] = useState<Book[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [currentQuote, setCurrentQuote] = useState(0);
   const [direction, setDirection] = useState(0);
@@ -47,6 +48,7 @@ export default function Home() {
   const [paginatedBooks, setPaginatedBooks] = useState<Book[]>([]);
   const [totalBooks, setTotalBooks] = useState(0);
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
+  const [dynamicCategories, setDynamicCategories] = useState<string[]>(['Fantasy', 'Romance', 'Mystery']);
 
 
   const startInteraction = () => {
@@ -171,6 +173,16 @@ export default function Home() {
         .order('created_at', { ascending: false })
         .range(0, 49);
 
+      const { data: initialFeatured } = await supabase
+        .from('books')
+        .select('*')
+        .eq('featured', true).limit(20)
+        .order('created_at', { ascending: false });
+
+      if (initialFeatured) {
+        setFeaturedBooks(initialFeatured);
+      }
+
       if (initialBooks && initialBooks.length > 0) {
         setBooks(initialBooks);
         setFateBook(initialBooks[Math.floor(Math.random() * initialBooks.length)]);
@@ -224,8 +236,8 @@ export default function Home() {
   
   const famousGenres = ['Classics', 'Fantasy', 'Romance', 'Fiction', 'Mystery', 'Sci-Fi', 'History', 'Biography'];
   const fixedCategories = ['All', 'Most Popular', 'Bundles', 'Personal Development', 'Trendiest', 'Classics', 'Philosophy'];
-  const displayCategories = [...fixedCategories, 'Fantasy', 'Romance', 'Mystery'];
-  const hasMoreCategories = true;
+  const displayCategories = [...fixedCategories, ...dynamicCategories.slice(0, 3)];
+  const hasMoreCategories = dynamicCategories.length > 3;
 
 
   useEffect(() => {
@@ -245,31 +257,29 @@ export default function Home() {
         if (selectedCategory === 'Bundles') {
           query = query.eq('is_bundle', true);
         } else if (selectedCategory === 'Personal Development') {
-          query = query.contains('categories', ['Personal Development']);
+          query = query.overlaps('categories', ['Personal Development', 'personal development', 'Self Help', 'self help', 'Self-Help', 'self-help']);
         } else {
-          query = query.contains('categories', [selectedCategory]);
+          query = query.overlaps('categories', [selectedCategory, selectedCategory.toLowerCase(), selectedCategory.toUpperCase()]);
         }
       } else if (selectedCategory === 'Featured') {
-        query = query.eq('featured', true);
+        query = query.eq('featured', true).limit(20);
+      } else if (selectedCategory === 'Trendiest') {
+        query = query.gte('rating', 4.5);
       }
 
       // Language
       if (selectedLanguage !== 'All') {
         if (selectedLanguage === 'French') {
-          query = query.contains('categories', ['French']); // Simplified, should maybe check others but Supabase array cs is strict
+          query = query.overlaps('categories', ['French', 'french', 'Français', 'français', 'Francais', 'francais']);
         } else if (selectedLanguage === 'Arabic') {
-          query = query.contains('categories', ['Arabic']);
+          query = query.overlaps('categories', ['Arabic', 'arabic', 'Arab', 'arab', 'العربية']);
         } else if (selectedLanguage === 'Manga') {
-          query = query.contains('categories', ['Manga']);
+          query = query.overlaps('categories', ['Manga', 'manga']);
         } else if (selectedLanguage === 'Algerian') {
-          query = query.contains('categories', ['Algerian']);
+          query = query.overlaps('categories', ['Algerian', 'algerian', 'Algerien', 'algerien', 'Algérien', 'algérien', 'DZ', 'dz', 'الجزائر']);
         } else if (selectedLanguage === 'English') {
-          query = query.contains('categories', ['English']);
+          query = query.overlaps('categories', ['English', 'english', 'Anglais', 'anglais']);
         }
-      } else {
-        // Exclude manga from "All" unless explicitly selected (reproducing old logic)
-        // Note: PostgREST doesn't support easy array NOT CONTAINS for JSONB/array without raw SQL.
-        // We will just let it be for now, or fetch and filter, but we are doing strict server-side.
       }
 
       // Sorting & Pagination logic requested by user:
@@ -574,7 +584,7 @@ export default function Home() {
       
       {/* Hero Scroll Animation */}
       <div data-toc data-toc-title="Featured Reads" className="relative z-10">
-        <HeroScrollDemo featuredBooks={books.filter(b => b.featured)} />
+        <HeroScrollDemo featuredBooks={featuredBooks} />
       </div>
 
       {/* Language Selector Section */}
