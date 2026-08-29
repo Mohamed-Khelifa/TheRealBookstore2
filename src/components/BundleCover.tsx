@@ -17,7 +17,7 @@ export const BundleCover: React.FC<BundleCoverProps> = ({ bundleBookIds, allBook
     const missingIds = bundleBookIds.filter(id => !allBooks.find(b => b.id === id));
     if (missingIds.length > 0) {
       const fetchMissing = async () => {
-        const { data } = await supabase.from('books').select('*').in('id', missingIds);
+        const { data } = await supabase.from('books').select('id, title, cover_image_url').in('id', missingIds);
         if (data) {
           setFetchedBooks(prev => {
             const newBooks = [...prev];

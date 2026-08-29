@@ -51,34 +51,26 @@ export function OrderNotification() {
     }
   };
 
-  useEffect(() => {
+    useEffect(() => {
+    let mounted = true;
     const fetchLatest = async () => {
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('orders')
-          .select('*')
+          .select('id, customer_name, items, created_at')
           .order('created_at', { ascending: false })
           .limit(1);
           
-        if (data && data.length > 0) {
+        if (mounted && data && data.length > 0) {
           processOrder(data[0]);
         }
       } catch (err) {}
     };
+    
     fetchLatest();
-
-    const channel = supabase.channel('public:orders')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'orders' },
-        (payload) => {
-          processOrder(payload.new);
-        }
-      )
-      .subscribe();
-
+    
     return () => {
-      supabase.removeChannel(channel);
+      mounted = false;
     };
   }, []);
 

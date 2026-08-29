@@ -169,13 +169,13 @@ export default function Home() {
       // 1. Instantly fetch initial 50 books for immediate page rendering
       const { data: initialBooks } = await supabase
         .from('books')
-        .select('*')
+        .select('id, title, author, price, old_price, cover_image_url, rating, is_bundle, bundle_books, featured, categories, created_at')
         .order('created_at', { ascending: false })
         .range(0, 49);
 
       const { data: initialFeatured } = await supabase
         .from('books')
-        .select('*')
+        .select('id, title, author, price, old_price, cover_image_url, rating, is_bundle, bundle_books, featured, categories, created_at')
         .eq('featured', true).limit(20)
         .order('created_at', { ascending: false });
 
@@ -245,7 +245,7 @@ export default function Home() {
     const fetchFilteredBooks = async () => {
       setIsLoadingBooks(true);
       
-      let query = supabase.from('books').select('*', { count: 'exact' });
+      let query = supabase.from('books').select('id, title, author, price, old_price, cover_image_url, rating, is_bundle, bundle_books, featured, categories, created_at', { count: 'exact' });
 
       // Search Query
       if (searchQuery) {

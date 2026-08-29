@@ -156,7 +156,7 @@ export default function BookDetail() {
         if (data.is_bundle && data.bundle_books && data.bundle_books.length > 0) {
           const { data: bundleData } = await supabase
             .from('books')
-            .select('*')
+            .select('id, title, author, price, old_price, cover_image_url, rating, is_bundle, bundle_books, featured, categories, created_at')
             .in('id', data.bundle_books);
           if (bundleData) setBundleBooks(bundleData);
         }
@@ -169,15 +169,22 @@ export default function BookDetail() {
           .order('created_at', { ascending: false });
         if (reviewsData) setReviews(reviewsData);
 
-        // Fetch related books based on categories, author, and rating
-        const { data: allOtherBooks } = await supabase
+                // Fetch related books based on categories, author, and rating
+        const currentCategories = data.categories || [];
+        const currentAuthor = data.author || '';
+        
+        let relatedQuery = supabase
           .from('books')
-          .select('*')
+          .select('id, title, author, price, old_price, cover_image_url, rating, is_bundle, bundle_books, featured, categories, created_at')
           .neq('id', id);
+          
+        if (currentCategories.length > 0) {
+          relatedQuery = relatedQuery.overlaps('categories', currentCategories);
+        }
+        
+        const { data: allOtherBooks } = await relatedQuery.limit(50);
         
         if (allOtherBooks) {
-          const currentCategories = data.categories || [];
-          const currentAuthor = data.author || '';
           
           const sortedRelated = allOtherBooks.map(b => {
              let score = 0;

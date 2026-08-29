@@ -45,8 +45,7 @@ export default function App() {
   const [adminError, setAdminError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [allBooksCache, setAllBooksCache] = useState<any[]>([]);
-  const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
+    const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   
   const { totalItems } = useCart();
@@ -194,23 +193,15 @@ export default function App() {
       setIsSearching(true);
       setIsSearchDropdownOpen(true);
       try {
-        let booksToSearch = allBooksCache;
-        if (booksToSearch.length === 0) {
-          const { data, error } = await fetchAllRows(
-            'books',
-            'id, title, author, cover_image_url, created_at',
-            'created_at',
-            false
-          );
-            
-          if (!error && data) {
-            setAllBooksCache(data);
-            booksToSearch = data;
-          }
+        const { data } = await supabase
+          .from('books')
+          .select('id, title, author, price, old_price, cover_image_url, is_bundle, bundle_books, categories')
+          .or(`title.ilike.%${searchQuery}%,author.ilike.%${searchQuery}%`)
+          .limit(5);
+          
+        if (data) {
+          setSearchResults(data);
         }
-
-        const results = searchBooks(booksToSearch, searchQuery, 5);
-        setSearchResults(results);
       } catch (err) {
         console.error('Search error:', err);
       } finally {
@@ -220,7 +211,7 @@ export default function App() {
 
     const timer = setTimeout(performSearch, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery, allBooksCache]);
+  }, [searchQuery]);
 
   // Close dropdown on click outside
   useEffect(() => {

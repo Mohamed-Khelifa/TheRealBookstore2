@@ -16,7 +16,7 @@ export default function Categories() {
   useEffect(() => {
     const fetchBooks = async () => {
       // Keep books for counting just out of recent, but it's not fully accurate. To avoid showing '0 Books', we can just hide it for dynamic cats
-      const { data } = await supabase.from('books').select('*').order('created_at', { ascending: false }).limit(50);
+      const { data } = await supabase.from('books').select('id, featured, is_bundle, rating, categories').order('created_at', { ascending: false }).limit(50);
       if (data) setBooks(data);
       
       const { data: catData } = await supabase.from('books').select('categories');

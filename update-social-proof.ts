@@ -1,24 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingBag, Star, User } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import fs from 'fs';
 
-interface Activity {
-  id: string;
-  name: string;
-  city: string;
-  action: 'bought' | 'reviewed';
-  book: string;
-  timestamp: string;
-}
+let code = fs.readFileSync('src/components/SocialProof.tsx', 'utf-8');
 
-export const SocialProof = () => {
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isVisible, setIsVisible] = useState(false);
-  const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-    useEffect(() => {
+// Replace the useEffect
+const newUseEffect = `  useEffect(() => {
     let mounted = true;
     const fetchRecentActivity = async () => {
       try {
@@ -79,39 +64,8 @@ export const SocialProof = () => {
       mounted = false;
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     };
-  }, []);
+  }, []);`;
 
-  if (activities.length === 0) return null;
+code = code.replace(/useEffect\(\(\) => \{[\s\S]*?return \(\) => \{[\s\S]*?\}\;\n  \}, \[\]\)\;/, newUseEffect);
 
-  const activity = activities[currentIndex];
-
-  return (
-    <AnimatePresence>
-      {isVisible && (
-        <motion.div
-          initial={{ opacity: 0, x: -50, y: 20 }}
-          animate={{ opacity: 1, x: 0, y: 0 }}
-          exit={{ opacity: 0, x: -50, y: 20 }}
-          className="fixed bottom-6 left-6 z-[100] hidden md:flex items-center space-x-4 bg-ink/80 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-2xl max-w-xs pointer-events-none"
-        >
-          <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0 border border-primary/30">
-            {activity.action === 'bought' ? (
-              <ShoppingBag className="w-5 h-5 text-primary-light" />
-            ) : (
-              <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
-            )}
-          </div>
-          <div className="space-y-0.5">
-            <p className="text-xs text-white font-medium">
-              <span className="font-bold text-primary-light">{activity.name}</span> 
-              {activity.city !== 'A reader' ? ` from ${activity.city}` : ''}
-            </p>
-            <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">
-              Just {activity.action} <span className="text-white">"{activity.book}"</span>
-            </p>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-};
+fs.writeFileSync('src/components/SocialProof.tsx', code);
