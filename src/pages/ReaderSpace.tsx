@@ -65,7 +65,7 @@ export default function ReaderSpace() {
     const { data } = await supabase.from('books').select('id, title, author, price, old_price, cover_image_url, rating, is_bundle, bundle_books, featured, categories, created_at').order('created_at', { ascending: false }).limit(50);
     if (data) {
       const booksMap: Record<string, Book> = {};
-      data.forEach(b => booksMap[b.id] = b);
+      data.forEach(b => booksMap[b.id] = b as any);
       setAllBooks(booksMap);
     }
   };
@@ -90,7 +90,7 @@ export default function ReaderSpace() {
         .eq('phone', phoneNumber)
         .order('created_at', { ascending: false });
         
-      if (oData) setOrders(oData);
+      if (oData) setOrders(oData as any);
 
     } catch (err) {
       console.error(err);

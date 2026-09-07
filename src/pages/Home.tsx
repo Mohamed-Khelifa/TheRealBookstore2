@@ -15,6 +15,7 @@ import { BundleCover } from '../components/BundleCover';
 import { DynamicIslandTOC } from '../components/ui/dynamic-island-toc';
 import { LazyImage } from '../components/ui/lazy-image';
 import { trackAddToCart } from '../lib/metaPixel';
+import { FlashDealsSection } from '../components/FlashDealsSection';
 
 export default function Home() {
   const { addItem } = useCart();
@@ -180,12 +181,12 @@ export default function Home() {
         .order('created_at', { ascending: false });
 
       if (initialFeatured) {
-        setFeaturedBooks(initialFeatured);
+        setFeaturedBooks(initialFeatured as any);
       }
 
       if (initialBooks && initialBooks.length > 0) {
-        setBooks(initialBooks);
-        setFateBook(initialBooks[Math.floor(Math.random() * initialBooks.length)]);
+        setBooks(initialBooks as any);
+        setFateBook(initialBooks[Math.floor(Math.random() * initialBooks.length)] as any);
       }
 
       // 2. Fetch quotes in a single lightweight query
@@ -305,7 +306,7 @@ export default function Home() {
       const { data, count } = await query;
       
       if (isMounted) {
-        if (data) setPaginatedBooks(data);
+        if (data) setPaginatedBooks(data as any);
         if (count !== null) setTotalBooks(count);
         setIsLoadingBooks(false);
       }
@@ -345,16 +346,21 @@ export default function Home() {
     e.preventDefault();
     e.stopPropagation();
     
+    // Outside Special Offers area, books use their regular base price
+    const regularPrice = (book.old_price && Number(book.old_price) > Number(book.price)) 
+      ? Number(book.old_price) 
+      : Number(book.price);
+
     addItem({
       book_id: book.id,
       title: book.title,
       author: book.author,
-      price: book.price,
+      price: regularPrice,
       qty: 1,
       cover_image_url: book.cover_image_url
     });
     
-    trackAddToCart({ id: book.id, title: book.title, price: book.price }, 1);
+    trackAddToCart({ id: book.id, title: book.title, price: regularPrice }, 1);
     
     setAddedBookId(book.id);
     
@@ -587,6 +593,9 @@ export default function Home() {
         <HeroScrollDemo featuredBooks={featuredBooks} />
       </div>
 
+      {/* Flashy Discounted Books & Express Delivery Section */}
+      <FlashDealsSection books={books} />
+
       {/* Language Selector Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-20 mt-8 mb-16">
         <div className="text-center space-y-4 mb-8">
@@ -801,10 +810,9 @@ export default function Home() {
                   <p className="text-white/50 text-xs sm:text-sm line-clamp-1">{book.author}</p>
                   <div className="pt-1 sm:pt-2 flex items-center justify-between">
                     <div className="flex flex-col">
-                      {Number(book.old_price) > 0 && (
-                        <span className="text-[10px] sm:text-xs text-white/30 line-through">{(book.old_price || 0).toFixed(0)} DA</span>
-                      )}
-                      <span className="font-bold text-primary-light text-sm sm:text-base">{(book.price || 0).toFixed(0)} DA</span>
+                      <span className="font-bold text-primary-light text-sm sm:text-base">
+                        {((book.old_price && Number(book.old_price) > Number(book.price)) ? Number(book.old_price) : Number(book.price)).toFixed(0)} DA
+                      </span>
                     </div>
                     <div className="flex items-center text-yellow-400">
                       <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" />

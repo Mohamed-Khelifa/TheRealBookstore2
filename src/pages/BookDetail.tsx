@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Star, ShoppingCart, ArrowLeft, ShieldCheck, Truck, RefreshCw, MessageSquare, Plus, Minus, CheckCircle, Trophy, Sparkles, BookDashed, Bookmark } from 'lucide-react';
+import { Star, ShoppingCart, ArrowLeft, ShieldCheck, Truck, RefreshCw, MessageSquare, Plus, Minus, CheckCircle, Trophy, Sparkles, BookDashed, Bookmark, Tag } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
 import { Book, Review } from '../types';
@@ -79,16 +79,21 @@ export default function BookDetail() {
 
   const cuteNames = ['Happy Panda', 'Cozy Koala', 'Reading Rabbit', 'Bookish Bear', 'Wise Owl', 'Curious Cat', 'Dreamy Deer', 'Little Fox'];
 
+  const regularPrice = (book && book.old_price && Number(book.old_price) > Number(book.price))
+    ? Number(book.old_price)
+    : Number(book?.price || 0);
+
   const handleAddToCart = (e: React.MouseEvent) => {
     if (cartStatus === 'go_to_cart') {
       navigate('/checkout');
       return;
     }
     
-    addItem({ book_id: book!.id, title: book!.title, author: book!.author, price: book!.price, qty, cover_image_url: book!.cover_image_url });
+    // Regular purchase uses regular price
+    addItem({ book_id: book!.id, title: book!.title, author: book!.author, price: regularPrice, qty, cover_image_url: book!.cover_image_url });
     setCartStatus('added');
     
-    trackAddToCart({ id: book!.id, title: book!.title, price: book!.price }, qty);
+    trackAddToCart({ id: book!.id, title: book!.title, price: regularPrice }, qty);
     
     // Dispatch animation event
     const event = new CustomEvent('add-to-cart-animation', {
@@ -100,6 +105,25 @@ export default function BookDetail() {
     });
     window.dispatchEvent(event);
     
+    setTimeout(() => setCartStatus('go_to_cart'), 2000);
+  };
+
+  const handleAddSpecialOfferToCart = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    addItem({ book_id: book!.id, title: book!.title, author: book!.author, price: book!.price, qty, cover_image_url: book!.cover_image_url });
+    setCartStatus('added');
+    
+    trackAddToCart({ id: book!.id, title: book!.title, price: book!.price }, qty);
+
+    const event = new CustomEvent('add-to-cart-animation', {
+      detail: {
+        x: e.clientX,
+        y: e.clientY,
+        imageUrl: book!.cover_image_url || 'https://picsum.photos/seed/book/600/800'
+      }
+    });
+    window.dispatchEvent(event);
+
     setTimeout(() => setCartStatus('go_to_cart'), 2000);
   };
 
@@ -158,7 +182,7 @@ export default function BookDetail() {
             .from('books')
             .select('id, title, author, price, old_price, cover_image_url, rating, is_bundle, bundle_books, featured, categories, created_at')
             .in('id', data.bundle_books);
-          if (bundleData) setBundleBooks(bundleData);
+          if (bundleData) setBundleBooks(bundleData as any);
         }
 
         // Fetch reviews
@@ -210,7 +234,7 @@ export default function BookDetail() {
           .map(item => item.book)
           .slice(0, 10);
           
-          setRelatedBooks(sortedRelated);
+          setRelatedBooks(sortedRelated as any);
         }
       }
       setLoading(false);
@@ -272,15 +296,29 @@ export default function BookDetail() {
             </div>
           </div>
 
-          <div className="flex items-baseline space-x-4">
-            <div className="text-4xl font-bold text-primary-light">{(book.price || 0).toFixed(0)} DA</div>
+          <div className="space-y-4">
+            <div className="flex items-baseline space-x-4">
+              <div className="text-4xl font-bold text-primary-light">{regularPrice.toFixed(0)} DA</div>
+            </div>
+
             {Number(book.old_price) > book.price && (
-              <>
-                <div className="text-xl text-white/20 line-through">{(book.old_price || 0).toFixed(0)} DA</div>
-                <div className="bg-yellow-400 text-ink px-3 py-1 rounded-full font-black text-xs shadow-lg">
-                  SAVE {Math.round(((book.old_price! - book.price) / book.old_price!) * 100)}%
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+                <div className="flex items-center gap-2 text-amber-300 font-bold text-xs uppercase tracking-wider">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>Special Offer Deal Available!</span>
                 </div>
-              </>
+                <p className="text-white/80 text-xs leading-relaxed">
+                  Get this single copy for only <strong className="text-amber-300 font-bold">{book.price} DA</strong> (Save {Number(book.old_price) - book.price} DA) when ordered as a Special Offer deal!
+                </p>
+                <button
+                  type="button"
+                  onClick={handleAddSpecialOfferToCart}
+                  className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  Claim Special Offer Price ({book.price} DA)
+                </button>
+              </div>
             )}
           </div>
 

@@ -589,6 +589,50 @@ export default function Checkout() {
           })
         }).catch(err => console.error('Notification failed:', err));
 
+        // Remove purchased books from inventory in site_settings and database upon order confirmation
+        try {
+          const purchasedIds = items.map(i => String(i.book_id)).filter(Boolean);
+          
+          if (purchasedIds.length > 0) {
+            // 1. Remove from inventory_books array in site_settings
+            const { data: invSetting } = await supabase
+              .from('site_settings')
+              .select('value')
+              .eq('key', 'inventory_books')
+              .maybeSingle();
+
+            if (invSetting?.value) {
+              try {
+                const currentInv: string[] = JSON.parse(invSetting.value);
+                const updatedInv = currentInv.filter(id => !purchasedIds.includes(String(id)));
+
+                await supabase.from('site_settings').upsert({
+                  key: 'inventory_books',
+                  value: JSON.stringify(updatedInv),
+                  updated_at: new Date().toISOString()
+                }, { onConflict: 'key' });
+              } catch (parseErr) {
+                console.warn('Failed to update inventory_books setting:', parseErr);
+              }
+            }
+
+            // 2. Clear old_price on purchased books so discounts don't persist
+            await supabase
+              .from('books')
+              .update({ old_price: 0, updated_at: new Date().toISOString() })
+              .in('id', purchasedIds);
+          }
+
+          // 3. Update local storage for immediate UI reactivity
+          const existingStr = localStorage.getItem('purchased_deal_book_ids') || '[]';
+          const existingArr = JSON.parse(existingStr);
+          const updatedArr = Array.from(new Set([...existingArr, ...purchasedIds]));
+          localStorage.setItem('purchased_deal_book_ids', JSON.stringify(updatedArr));
+          window.dispatchEvent(new CustomEvent('order-completed'));
+        } catch (storageErr) {
+          console.warn('Failed to remove purchased books from inventory:', storageErr);
+        }
+
         setOrderComplete(trackingId);
         clearCart();
       }

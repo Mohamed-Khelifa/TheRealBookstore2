@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Truck, CheckCircle, XCircle, Clock, RefreshCw, Copy, 
@@ -8,11 +8,13 @@ import {
 import { Order } from '../types';
 import { supabase } from '../lib/supabase';
 import { fetchAllRows } from '../lib/api';
+import { DELIVERY_DEFAULTS } from './ManageWhatsApp';
 
 export default function LiveDeliveryFeed() {
-  const [activeTab, setActiveTab] = useState<'IN_TRANSIT' | 'DELIVERED' | 'RETURNED' | 'PENDING' | 'WEBHOOKS'>('IN_TRANSIT');
+  const [activeTab, setActiveTab] = useState<string>('Tous');
   const [orders, setOrders] = useState<Order[]>([]);
   const [webhookLogs, setWebhookLogs] = useState<any[]>([]);
+  const [waTemplates, setWaTemplates] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [loadingWebhooks, setLoadingWebhooks] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -21,16 +23,77 @@ export default function LiveDeliveryFeed() {
   // Real-time notifications state
   const [liveNotification, setLiveNotification] = useState<{ id: string, title: string, message: string, type: 'success' | 'error' | 'info' } | null>(null);
 
+    
+  const getWhatsAppMessage = (order: Order, tracking: string, status: string, templates: Record<string, string>) => {
+    const name = order.customer_name || 'Client';
+    const orderRef = tracking || order.id || 'N/A';
+    const price = order.total_price ? `${order.total_price} DA` : '';
+    const s = (status || '').toLowerCase().trim();
+    
+    let templateKey = 'wa_delivery_default';
+    if (s === 'sorti en livraison') templateKey = 'wa_delivery_sorti';
+    else if (s === 'en attente du client' || s === 'en attente') templateKey = 'wa_delivery_attente';
+    else if (s === 'en alerte' || s === 'en alert') templateKey = 'wa_delivery_alerte';
+    else if (['tentative échouée', 'echèc livraison'].includes(s)) templateKey = 'wa_delivery_failed';
+    else if (['expédié', 'centre', 'vers wilaya', 'en localisation'].includes(s)) templateKey = 'wa_delivery_transit';
+    else if (s.includes('retour')) templateKey = 'wa_delivery_retour';
+    else if (s === 'livré' || s === 'livre') templateKey = 'wa_delivery_livre';
+
+    let message = templates[templateKey] || DELIVERY_DEFAULTS[templateKey] || '';
+    
+    // Replace variables
+    message = message
+      .replace(/\{\{customerName\}\}/g, name)
+      .replace(/\{\{orderRef\}\}/g, orderRef)
+      .replace(/\{\{totalPrice\}\}/g, price)
+      .replace(/\{\{status\}\}/g, status);
+    
+    return encodeURIComponent(message);
+  };
+
   const fetchOrders = async () => {
     setRefreshing(true);
     try {
+      const [settingsRes, ordersRes, parcelsRes] = await Promise.all([
+        supabase.from('site_settings').select('*').in('key', ['wa_delivery_sorti', 'wa_delivery_attente', 'wa_delivery_alerte', 'wa_delivery_failed', 'wa_delivery_transit', 'wa_delivery_retour', 'wa_delivery_livre', 'wa_delivery_default']),
+        fetchAllRows('orders', '*', 'created_at', false),
+        fetch('/api/guepex-parcels?page_size=500').catch(() => null)
+      ]);
+      
+      if (settingsRes && settingsRes.data) {
+        const templates: Record<string, string> = {};
+        settingsRes.data.forEach((s: any) => templates[s.key] = s.value);
+        setWaTemplates(templates);
+      }
+      
+      let parcelsMap: Record<string, any> = {};
+      if (parcelsRes && parcelsRes.ok) {
+         const pData = await parcelsRes.json().catch(() => null);
+         const parcelArray = pData?.data || [];
+         parcelArray.forEach((p: any) => {
+           if (p.order_id) parcelsMap[String(p.order_id).toLowerCase()] = p;
+           if (p.tracking) parcelsMap[String(p.tracking).toLowerCase()] = p;
+         });
+      }
+      
+      if (ordersRes && ordersRes.data) {
+        const merged = ordersRes.data.map((o: any) => {
+          const parcel = parcelsMap[String(o.id).toLowerCase()] || parcelsMap[String(o.tracking_code || '').toLowerCase()];
+          if (parcel) {
+            return {
+              ...o,
+              tracking_code: parcel.tracking || o.tracking_code,
+              guepex_status: parcel.last_status || parcel.status,
+              guepex_reason: parcel.reason
+            };
+          }
+          return o;
+        });
+        setOrders(merged);
+      }
+      
       if (activeTab === 'WEBHOOKS') {
         await fetchWebhookLogs();
-      } else {
-        const { data: ordersData } = await fetchAllRows('orders', '*', 'created_at', false);
-        if (ordersData) {
-          setOrders(ordersData);
-        }
       }
     } catch (err) {
       console.error('Error fetching live delivery data:', err);
@@ -58,6 +121,12 @@ export default function LiveDeliveryFeed() {
 
   useEffect(() => {
     fetchOrders();
+  }, []);
+  
+  useEffect(() => {
+    if (activeTab === 'WEBHOOKS' && webhookLogs.length === 0) {
+      fetchWebhookLogs();
+    }
   }, [activeTab]);
 
   useEffect(() => {
@@ -86,7 +155,7 @@ export default function LiveDeliveryFeed() {
             setOrders(prev => {
               const exists = prev.find(o => o.id === newOrder.id);
               if (exists) {
-                return prev.map(o => o.id === newOrder.id ? newOrder : o);
+                return prev.map(o => o.id === newOrder.id ? { ...newOrder, guepex_status: o.guepex_status, tracking_code: o.tracking_code, guepex_reason: o.guepex_reason } : o);
               }
               return [newOrder, ...prev];
             });
@@ -153,6 +222,42 @@ export default function LiveDeliveryFeed() {
     setTimeout(() => setLiveNotification(null), 8000);
   };
 
+  const matchOrderStatus = (o: Order, tab: string) => {
+    if (tab === 'WEBHOOKS') return true;
+    if (tab === 'Tous' || tab === 'All') return true;
+
+    const guepexStatus = (o.guepex_status || '').trim();
+    const orderStatus = (o.status || '').trim();
+    const orderState = (o.order_state || '').trim();
+
+    const statusStr = (guepexStatus || orderStatus || orderState).toLowerCase();
+    const tabLower = tab.toLowerCase().trim();
+
+    if (tabLower === 'en alerte') {
+      return statusStr === 'en alerte' || statusStr === 'en alert' || statusStr === 'alerte';
+    }
+    if (tabLower === 'en attente du client' || tabLower === 'en attente') {
+      return statusStr === 'en attente du client' || statusStr === 'en attente' || statusStr === 'attente';
+    }
+    if (tabLower === 'sorti en livraison') {
+      return statusStr === 'sorti en livraison' || statusStr === 'sorti';
+    }
+    if (tabLower === 'livré' || tabLower === 'livre') {
+      return statusStr === 'livré' || statusStr === 'livre' || statusStr === 'delivered' || statusStr === 'delivered_paid';
+    }
+    if (tabLower === 'expédié' || tabLower === 'expedie') {
+      return statusStr === 'expédié' || statusStr === 'expedie' || statusStr === 'shipped' || statusStr === 'ready_not_delivered';
+    }
+    if (tabLower === 'tentative échouée' || tabLower === 'echec livraison') {
+      return statusStr === 'tentative échouée' || statusStr === 'echèc livraison' || statusStr === 'echec livraison';
+    }
+    if (tabLower === 'retourné au vendeur') {
+      return statusStr.includes('retourné au vendeur') || statusStr.includes('retourne au vendeur');
+    }
+
+    return statusStr === tabLower;
+  };
+
   const filteredOrders = orders.filter(o => {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -161,23 +266,13 @@ export default function LiveDeliveryFeed() {
         (o.phone || '').includes(q) ||
         (o.tracking_code || '').includes(q) ||
         (o.id?.toString() || '').includes(q) ||
-        (o.client_note?.toLowerCase() || '').includes(q);
+        (o.client_note?.toLowerCase() || '').includes(q) ||
+        (o.wilaya?.toLowerCase() || '').includes(q);
       
       if (!matchSearch) return false;
     }
     
-    switch(activeTab) {
-      case 'IN_TRANSIT':
-        return o.status === 'SHIPPED' || o.order_state === 'READY_NOT_DELIVERED';
-      case 'DELIVERED':
-        return o.status === 'DELIVERED' || o.order_state === 'DELIVERED_PAID';
-      case 'RETURNED':
-        return o.status === 'CANCELLED' || o.order_state === 'DELIVERED_RETURNED';
-      case 'PENDING':
-        return o.status === 'PENDING' || o.order_state === 'DID_NOT_ARRIVE';
-      default:
-        return true;
-    }
+    return matchOrderStatus(o, activeTab);
   });
 
   const inTransitOrders = orders.filter(o => o.status === 'SHIPPED' || o.order_state === 'READY_NOT_DELIVERED');
@@ -237,52 +332,47 @@ export default function LiveDeliveryFeed() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4 border-b border-white/10">
-        <button
-          onClick={() => setActiveTab('IN_TRANSIT')}
-          className={`pb-4 font-bold text-sm flex items-center gap-2 border-b-2 transition-all ${
-            activeTab === 'IN_TRANSIT' ? 'border-primary text-primary-light' : 'border-transparent text-white/50 hover:text-white'
-          }`}
-        >
-          <Truck className="w-4 h-4" />
-          In Transit
-        </button>
-        <button
-          onClick={() => setActiveTab('DELIVERED')}
-          className={`pb-4 font-bold text-sm flex items-center gap-2 border-b-2 transition-all ${
-            activeTab === 'DELIVERED' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-white/50 hover:text-white'
-          }`}
-        >
-          <CheckCircle className="w-4 h-4" />
-          Delivered
-        </button>
-        <button
-          onClick={() => setActiveTab('RETURNED')}
-          className={`pb-4 font-bold text-sm flex items-center gap-2 border-b-2 transition-all ${
-            activeTab === 'RETURNED' ? 'border-red-500 text-red-400' : 'border-transparent text-white/50 hover:text-white'
-          }`}
-        >
-          <XCircle className="w-4 h-4" />
-          Returned / Failed
-        </button>
-        <button
-          onClick={() => setActiveTab('PENDING')}
-          className={`pb-4 font-bold text-sm flex items-center gap-2 border-b-2 transition-all ${
-            activeTab === 'PENDING' ? 'border-amber-500 text-amber-400' : 'border-transparent text-white/50 hover:text-white'
-          }`}
-        >
-          <Clock className="w-4 h-4" />
-          Pending Pick-up
-        </button>
-        <button
-          onClick={() => setActiveTab('WEBHOOKS')}
-          className={`pb-4 font-bold text-sm flex items-center gap-2 border-b-2 transition-all ${
-            activeTab === 'WEBHOOKS' ? 'border-purple-500 text-purple-400' : 'border-transparent text-white/50 hover:text-white'
-          }`}
-        >
-          <Activity className="w-4 h-4" />
-          Webhook Logs
-        </button>
+      <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-4 border-b border-white/10 scrollbar-hide">
+        {[
+          "Tous",
+          "Sorti en livraison",
+          "En alerte",
+          "En attente du client",
+          "Livré",
+          "Vers Wilaya",
+          "Centre",
+          "En préparation",
+          "Expédié",
+          "Tentative échouée",
+          "Retour vers centre",
+          "Retourné au centre",
+          "Retourné au vendeur",
+          "WEBHOOKS"
+        ].map(status => {
+          const count = status === 'WEBHOOKS' ? webhookLogs.length : status === 'Tous' ? orders.length : orders.filter(o => matchOrderStatus(o, status)).length;
+          
+          let colorClass = 'border-transparent text-white/50 hover:text-white bg-white/5';
+          let activeClass = 'border-primary text-primary-light bg-primary/10';
+          
+          if (['Sorti en livraison', 'Expédié'].includes(status)) activeClass = 'border-blue-500 text-blue-400 bg-blue-500/10';
+          else if (['En alerte', 'Tentative échouée', 'Echèc livraison', 'Retour vers centre', 'Retourné au centre', 'Retour à retirer'].includes(status)) activeClass = 'border-red-500 text-red-400 bg-red-500/10';
+          else if (status === 'WEBHOOKS') activeClass = 'border-purple-500 text-purple-400 bg-purple-500/10';
+
+          const isActive = activeTab === status;
+          
+          return (
+            <button
+              key={status}
+              onClick={() => setActiveTab(status)}
+              className={`whitespace-nowrap px-4 py-2 rounded-full font-bold text-xs flex items-center gap-2 border transition-all ${isActive ? activeClass : colorClass}`}
+            >
+              {status}
+              <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${isActive ? 'bg-white/20' : 'bg-black/30'}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="space-y-6">
@@ -418,10 +508,11 @@ export default function LiveDeliveryFeed() {
                         </td>
                         <td className="p-4">
                           <div className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border mb-1
-                            ${activeTab === 'DELIVERED' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 
-                              activeTab === 'RETURNED' ? 'bg-red-500/20 text-red-300 border-red-500/30' : 
-                              activeTab === 'IN_TRANSIT' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 
-                              'bg-amber-500/20 text-amber-300 border-amber-500/30'}`}
+                            ${['En alerte', 'Tentative échouée', 'Echèc livraison', 'Retour vers centre', 'Retourné au centre', 'Retour à retirer'].includes(statusText) 
+                              ? 'bg-red-500/20 text-red-300 border-red-500/30' 
+                              : ['Sorti en livraison', 'Expédié'].includes(statusText) 
+                                ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                : 'bg-amber-500/20 text-amber-300 border-amber-500/30'}`}
                           >
                             {statusText}
                           </div>
@@ -459,7 +550,7 @@ export default function LiveDeliveryFeed() {
                               </a>
                             )}
                             <a
-                              href={`https://wa.me/213${(order.phone || '').replace(/^0/, '')}?text=${encodeURIComponent(`Bonjour ${order.customer_name}, concernant votre commande BigDeal Bookstore (${tracking || order.id}): Le statut actuel est "${statusText}".`)}`}
+                              href={`https://wa.me/213${(order.phone || '').replace(/^0/, '')}?text=${getWhatsAppMessage(order, tracking || '', statusText, waTemplates)}`}
                               target="_blank"
                               rel="noreferrer"
                               className="inline-flex items-center justify-center gap-1.5 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 text-[10px] font-bold px-3 py-1.5 rounded-lg border border-emerald-500/30 transition-all"

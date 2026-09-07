@@ -1,6 +1,6 @@
 import React, { Suspense, useState, useEffect } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
-import { ShoppingCart, User, Menu, X, Search, LogOut, Instagram, Phone, Lock, Trophy, Truck } from 'lucide-react';
+import { ShoppingCart, User, Menu, X, Search, LogOut, Instagram, Phone, Lock, Trophy, Truck, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { useCart } from './store/useCart';
 import { LanguageSwitcher } from './components/LanguageSwitcher';
@@ -317,6 +317,21 @@ export default function App() {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
             />
+            <a
+              href="/#flash-deals"
+              onClick={(e) => {
+                e.preventDefault();
+                if (location.pathname !== '/') {
+                  navigate('/#flash-deals');
+                } else {
+                  const el = document.querySelector('[data-toc-title="Flash Deals"]');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              className="px-3.5 py-1.5 rounded-full text-xs font-semibold bg-primary/20 text-primary-light border border-primary/30 hover:bg-primary/30 hover:border-primary/50 transition-all flex items-center gap-1.5 shadow-sm"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-primary-light" /> Special Offers
+            </a>
             <NavLink 
               href="/#categories" 
               name="Categories" 
@@ -458,6 +473,24 @@ export default function App() {
                   <Link to="/" onClick={() => setIsMenuOpen(false)} className="flex items-center space-x-3 p-4 rounded-2xl hover:bg-white/5 text-white transition-colors">
                     <span className="font-bold">Home</span>
                   </Link>
+                  <a 
+                    href="/#flash-deals" 
+                    onClick={(e) => {
+                      setIsMenuOpen(false);
+                      if (location.pathname !== '/') {
+                        navigate('/#flash-deals');
+                      } else {
+                        const el = document.querySelector('[data-toc-title="Flash Deals"]');
+                        if (el) el.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    }} 
+                    className="flex items-center justify-between p-4 rounded-2xl bg-primary/10 border border-primary/20 text-primary-light font-semibold hover:bg-primary/20 transition-all"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-primary-light" /> Special Offers
+                    </span>
+                    <span className="bg-primary/20 text-primary-light text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border border-primary/30">DEALS</span>
+                  </a>
                   <Link to="/#categories" onClick={() => setIsMenuOpen(false)} className="flex items-center space-x-3 p-4 rounded-2xl hover:bg-white/5 text-white transition-colors">
                     <span className="font-bold">Categories</span>
                   </Link>

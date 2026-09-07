@@ -23,7 +23,7 @@ export const BundleCover: React.FC<BundleCoverProps> = ({ bundleBookIds, allBook
             const newBooks = [...prev];
             data.forEach(b => {
               if (!newBooks.find(existing => existing.id === b.id)) {
-                newBooks.push(b);
+                newBooks.push(b as any);
               }
             });
             return newBooks;

@@ -2869,6 +2869,14 @@ function ManageDiscounts() {
   const [discountRules, setDiscountRules] = useState('');
   const [isSavingRules, setIsSavingRules] = useState(false);
 
+  // Dedicated Inventory Book Discounts State
+  const [inventoryBooks, setInventoryBooks] = useState<Book[]>([]);
+  const [loadingBooks, setLoadingBooks] = useState(true);
+  const [bookSearch, setBookSearch] = useState('');
+  const [bookFilter, setBookFilter] = useState<'all' | 'discounted' | 'regular'>('all');
+  const [bookDrafts, setBookDrafts] = useState<Record<string, { origPrice: number; salePrice: number; percent: number }>>({});
+  const [savingBookId, setSavingBookId] = useState<string | null>(null);
+
   // Global Sale State
   const [globalSaleTitle, setGlobalSaleTitle] = useState('Weekend Flash Sale!');
   const [globalSalePercent, setGlobalSalePercent] = useState(0);
@@ -2882,7 +2890,164 @@ function ManageDiscounts() {
     fetchDiscounts();
     fetchRules();
     fetchGlobalSale();
+    fetchInventoryBooks();
   }, []);
+
+  const fetchInventoryBooks = async () => {
+    setLoadingBooks(true);
+    try {
+      const [booksRes, settingsRes] = await Promise.all([
+        fetchAllRows('books', '*', 'created_at', false),
+        supabase.from('site_settings').select('value').eq('key', 'inventory_books').single()
+      ]);
+
+      let invIds: string[] = [];
+      if (settingsRes.data && settingsRes.data.value) {
+        try {
+          const parsed = JSON.parse(settingsRes.data.value);
+          if (Array.isArray(parsed)) {
+            invIds = parsed.map(String);
+          }
+        } catch (e) {
+          console.warn('Error parsing inventory_books:', e);
+        }
+      }
+
+      const invSet = new Set(invIds);
+
+      if (booksRes.data) {
+        // Strictly fetch ONLY books that are marked in physical store inventory
+        const inInventoryBooks = (booksRes.data as Book[]).filter((b: Book) => 
+          invSet.has(String(b.id))
+        );
+
+        setInventoryBooks(inInventoryBooks);
+
+        const drafts: Record<string, { origPrice: number; salePrice: number; percent: number }> = {};
+        inInventoryBooks.forEach((b: Book) => {
+          const isDisc = Number(b.old_price) > 0 && Number(b.old_price) > Number(b.price);
+          const origPrice = isDisc ? Number(b.old_price) : Number(b.price);
+          const salePrice = isDisc ? Number(b.price) : Math.round((origPrice * 0.8) / 50) * 50;
+          const percent = isDisc 
+            ? Math.round(((origPrice - salePrice) / origPrice) * 100)
+            : 20;
+
+          drafts[b.id] = { origPrice, salePrice, percent };
+        });
+        setBookDrafts(drafts);
+      }
+    } catch (err) {
+      console.error('Error fetching inventory books for discounts:', err);
+    } finally {
+      setLoadingBooks(false);
+    }
+  };
+
+  const handleDraftPercentChange = (bookId: string, percent: number) => {
+    const origPrice = bookDrafts[bookId]?.origPrice || 1000;
+    const newSalePrice = Math.max(1, Math.round((origPrice * (1 - percent / 100)) / 10) * 10);
+    setBookDrafts(prev => ({
+      ...prev,
+      [bookId]: {
+        ...prev[bookId],
+        percent,
+        salePrice: newSalePrice
+      }
+    }));
+  };
+
+  const handleDraftSalePriceChange = (bookId: string, newSalePrice: number) => {
+    const origPrice = bookDrafts[bookId]?.origPrice || 1000;
+    const calcPercent = Math.max(0, Math.min(99, Math.round(((origPrice - newSalePrice) / origPrice) * 100)));
+    setBookDrafts(prev => ({
+      ...prev,
+      [bookId]: {
+        ...prev[bookId],
+        salePrice: newSalePrice,
+        percent: calcPercent
+      }
+    }));
+  };
+
+  const handleDraftOrigPriceChange = (bookId: string, newOrigPrice: number) => {
+    const currentPercent = bookDrafts[bookId]?.percent || 20;
+    const newSalePrice = Math.max(1, Math.round((newOrigPrice * (1 - currentPercent / 100)) / 10) * 10);
+    setBookDrafts(prev => ({
+      ...prev,
+      [bookId]: {
+        ...prev[bookId],
+        origPrice: newOrigPrice,
+        salePrice: newSalePrice
+      }
+    }));
+  };
+
+  const handleApplyBookDiscount = async (book: Book) => {
+    const draft = bookDrafts[book.id];
+    if (!draft) return;
+
+    if (draft.salePrice >= draft.origPrice) {
+      alert('Discounted price must be less than the original base price.');
+      return;
+    }
+
+    setSavingBookId(book.id);
+    try {
+      const { error } = await supabase
+        .from('books')
+        .update({
+          price: draft.salePrice,
+          old_price: draft.origPrice
+        })
+        .eq('id', book.id);
+
+      if (error) throw error;
+
+      setInventoryBooks(prev => prev.map(b => b.id === book.id ? { ...b, price: draft.salePrice, old_price: draft.origPrice } : b));
+      alert(`Applied discount to "${book.title}"! (${draft.origPrice} DA → ${draft.salePrice} DA)`);
+    } catch (err: any) {
+      console.error('Error applying book discount:', err);
+      alert(`Error: ${err.message}`);
+    } finally {
+      setSavingBookId(null);
+    }
+  };
+
+  const handleRemoveBookDiscount = async (book: Book) => {
+    if (!confirm(`Remove discount from "${book.title}" and restore regular price to ${book.old_price || book.price} DA?`)) return;
+
+    setSavingBookId(book.id);
+    try {
+      const restoredPrice = Number(book.old_price) > 0 ? Number(book.old_price) : Number(book.price);
+      const { error } = await supabase
+        .from('books')
+        .update({
+          price: restoredPrice,
+          old_price: 0
+        })
+        .eq('id', book.id);
+
+      if (error) throw error;
+
+      setInventoryBooks(prev => prev.map(b => b.id === book.id ? { ...b, price: restoredPrice, old_price: 0 } : b));
+      
+      setBookDrafts(prev => ({
+        ...prev,
+        [book.id]: {
+          origPrice: restoredPrice,
+          salePrice: Math.round(restoredPrice * 0.8),
+          percent: 20
+        }
+      }));
+
+      alert(`Discount removed from "${book.title}". Restored regular price (${restoredPrice} DA).`);
+    } catch (err: any) {
+      console.error('Error removing book discount:', err);
+      alert(`Error: ${err.message}`);
+    } finally {
+      setSavingBookId(null);
+    }
+  };
 
   const fetchGlobalSale = async () => {
     try {
@@ -3080,9 +3245,260 @@ function ManageDiscounts() {
     }
   };
 
+  const filteredInventoryBooks = inventoryBooks.filter(book => {
+    const matchesSearch = 
+      book.title.toLowerCase().includes(bookSearch.toLowerCase()) ||
+      book.author.toLowerCase().includes(bookSearch.toLowerCase()) ||
+      (book.sku && book.sku.toLowerCase().includes(bookSearch.toLowerCase()));
+
+    const isDisc = Number(book.old_price) > 0 && Number(book.old_price) > Number(book.price);
+
+    if (bookFilter === 'discounted') return matchesSearch && isDisc;
+    if (bookFilter === 'regular') return matchesSearch && !isDisc;
+    return matchesSearch;
+  });
+
+  const activeDiscountedCount = inventoryBooks.filter(b => Number(b.old_price) > 0 && Number(b.old_price) > Number(b.price)).length;
+
   return (
     <div className="space-y-12">
       <h2 className="text-3xl font-serif font-bold purplish-text-gradient">Manage Discounts</h2>
+
+      {/* DEDICATED SECTION: Single Book Inventory Discounts Manager */}
+      <div className="bg-white/5 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-amber-500/30 shadow-2xl space-y-8 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
+
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-6 relative z-10">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-amber-500/20 text-amber-400 rounded-2xl border border-amber-500/30">
+                <Tag className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-serif font-bold text-white flex items-center gap-2">
+                  Inventory Book Discounts
+                  <span className="text-xs font-sans px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+                    Storefront Deals Manager
+                  </span>
+                </h3>
+                <p className="text-xs text-white/60 mt-1">
+                  Only fetching books in your physical Store Inventory. Set discounts on your inventory titles to feature them in the "Discounted Books & Fast Delivery" section on the storefront.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="px-4 py-2.5 rounded-2xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold text-xs flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-emerald-400" />
+              {activeDiscountedCount} Inventory Book{activeDiscountedCount !== 1 ? 's' : ''} Discounted
+            </span>
+          </div>
+        </div>
+
+        {/* Controls: Search and Filter Tabs */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 relative z-10">
+          <div className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 text-white/40 absolute left-4 top-1/2 -translate-y-1/2" />
+            <input 
+              type="text"
+              value={bookSearch}
+              onChange={e => setBookSearch(e.target.value)}
+              placeholder="Search inventory books..."
+              className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+            {[
+              { id: 'all', label: `Inventory Books (${inventoryBooks.length})` },
+              { id: 'discounted', label: `Discounted (${activeDiscountedCount})` },
+              { id: 'regular', label: `Regular Price (${inventoryBooks.length - activeDiscountedCount})` },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setBookFilter(tab.id as any)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
+                  bookFilter === tab.id
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold shadow-md'
+                    : 'bg-white/5 text-white/70 hover:bg-white/10 border-white/10'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Book Items List */}
+        {loadingBooks ? (
+          <div className="text-center py-12 text-white/40 flex items-center justify-center gap-2">
+            <RefreshCw className="w-5 h-5 animate-spin text-amber-400" />
+            <span>Loading inventory books...</span>
+          </div>
+        ) : filteredInventoryBooks.length === 0 ? (
+          <div className="text-center py-12 text-white/60 bg-white/5 rounded-2xl border border-white/10 space-y-2">
+            <p className="font-semibold text-sm">
+              {inventoryBooks.length === 0 
+                ? 'No books are currently added to your Store Inventory.' 
+                : 'No store inventory books match your search or filter criteria.'}
+            </p>
+            {inventoryBooks.length === 0 && (
+              <p className="text-xs text-white/40">
+                Go to <Link to="/admin/inventory" className="text-amber-400 underline font-bold">Store Inventory</Link> to mark books as available in your store inventory.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 max-h-[600px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/20">
+            {filteredInventoryBooks.map(book => {
+              const isDisc = Number(book.old_price) > 0 && Number(book.old_price) > Number(book.price);
+              const draft = bookDrafts[book.id] || {
+                origPrice: isDisc ? Number(book.old_price) : Number(book.price),
+                salePrice: isDisc ? Number(book.price) : Math.round(Number(book.price) * 0.8),
+                percent: 20
+              };
+              const isSavingThis = savingBookId === book.id;
+
+              return (
+                <div 
+                  key={book.id} 
+                  className={`p-4 rounded-2xl border transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
+                    isDisc 
+                      ? 'bg-amber-500/10 border-amber-500/40 shadow-lg' 
+                      : 'bg-white/5 border-white/10 hover:border-white/20'
+                  }`}
+                >
+                  {/* Left: Book Thumbnail & Infos */}
+                  <div className="flex items-center gap-3.5 min-w-[260px]">
+                    <div className="w-14 h-20 rounded-lg overflow-hidden bg-black/40 shrink-0 border border-white/10">
+                      {book.is_bundle ? (
+                        <BundleCover bundleBookIds={book.bundle_books || []} allBooks={inventoryBooks} className="w-full h-full object-cover" />
+                      ) : (
+                        <LazyImage src={book.cover_image_url || 'https://picsum.photos/seed/book/200/300'} alt={book.title} className="w-full h-full object-cover" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-white text-sm line-clamp-1">{book.title}</h4>
+                        {isDisc && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            ON DISCOUNT
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-white/50">{book.author}</p>
+                      
+                      {/* Current Status Display */}
+                      <div className="mt-1.5 flex items-center gap-2 text-xs">
+                        {isDisc ? (
+                          <>
+                            <span className="text-white/40 line-through font-mono">{book.old_price} DA</span>
+                            <span className="text-emerald-400 font-bold font-mono">{book.price} DA</span>
+                            <span className="text-amber-300 font-bold text-[10px]">
+                              (-{Math.round(((Number(book.old_price) - Number(book.price)) / Number(book.old_price)) * 100)}% OFF)
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-white/70 font-mono">Original Base Price: <strong className="text-white">{book.price} DA</strong></span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Middle: Discount Controls */}
+                  <div className="flex flex-wrap items-center gap-3 bg-black/30 p-3 rounded-xl border border-white/10 flex-1">
+                    {/* Original Price Input */}
+                    <div className="space-y-1 w-28">
+                      <label className="text-[10px] font-bold text-white/50 uppercase">Original (DA)</label>
+                      <input 
+                        type="number"
+                        min="1"
+                        value={draft.origPrice}
+                        onChange={e => handleDraftOrigPriceChange(book.id, parseInt(e.target.value) || 1)}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:ring-1 focus:ring-amber-500"
+                      />
+                    </div>
+
+                    {/* Quick Discount Percent Pills */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-white/50 uppercase">Discount %</label>
+                      <div className="flex items-center gap-1">
+                        {[15, 20, 25, 30, 50].map(pct => (
+                          <button
+                            key={pct}
+                            onClick={() => handleDraftPercentChange(book.id, pct)}
+                            className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                              draft.percent === pct 
+                                ? 'bg-amber-500 text-slate-950 font-black' 
+                                : 'bg-white/10 text-white/70 hover:bg-white/20'
+                            }`}
+                          >
+                            -{pct}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Custom Percent Input */}
+                    <div className="space-y-1 w-16">
+                      <label className="text-[10px] font-bold text-white/50 uppercase">% Off</label>
+                      <input 
+                        type="number"
+                        min="1"
+                        max="99"
+                        value={draft.percent}
+                        onChange={e => handleDraftPercentChange(book.id, parseInt(e.target.value) || 0)}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white font-mono text-center focus:ring-1 focus:ring-amber-500"
+                      />
+                    </div>
+
+                    {/* New Sale Price Input */}
+                    <div className="space-y-1 w-28">
+                      <label className="text-[10px] font-bold text-amber-300 uppercase">Discounted (DA)</label>
+                      <input 
+                        type="number"
+                        min="1"
+                        value={draft.salePrice}
+                        onChange={e => handleDraftSalePriceChange(book.id, parseInt(e.target.value) || 1)}
+                        className="w-full bg-amber-500/10 border border-amber-500/40 rounded-lg px-2.5 py-1.5 text-xs text-amber-300 font-bold font-mono focus:ring-1 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Right: Actions */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => handleApplyBookDiscount(book)}
+                      disabled={isSavingThis}
+                      className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50"
+                    >
+                      {isSavingThis ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5" />
+                      )}
+                      <span>{isDisc ? 'Update Discount' : 'Apply Discount'}</span>
+                    </button>
+
+                    {isDisc && (
+                      <button
+                        onClick={() => handleRemoveBookDiscount(book)}
+                        disabled={isSavingThis}
+                        className="px-3 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 font-semibold text-xs flex items-center gap-1 transition-all active:scale-95 disabled:opacity-50"
+                        title="Remove discount and restore original price"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Remove</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Global Flash Sale Control */}
       <div className="bg-white/5 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/10 shadow-2xl space-y-8">
