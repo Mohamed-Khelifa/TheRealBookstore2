@@ -462,7 +462,8 @@ export default function Checkout() {
               title: i.title, 
               author: i.author, 
               price: parseFloat(i.price as any) || 0, 
-              qty: parseInt(i.qty as any) || 1 
+              qty: parseInt(i.qty as any) || 1,
+              is_discounted: i.is_discounted
             })),
             customer_name: `${formData.full_name}${formData.instagram_account ? ` (IG: @${formData.instagram_account})` : ''}${formData.phone2 ? ` (Alt: ${formData.phone2})` : ''}`,
             wilaya: formData.wilaya,

@@ -162,7 +162,8 @@ export function FlashDealsSection({ books: catalogBooks }: FlashDealsSectionProp
       author: book.author,
       price: book.price,
       qty: 1,
-      cover_image_url: book.cover_image_url
+      cover_image_url: book.cover_image_url,
+      is_discounted: true
     });
 
     trackAddToCart({ id: book.id, title: book.title, price: book.price }, 1);
@@ -280,7 +281,7 @@ export function FlashDealsSection({ books: catalogBooks }: FlashDealsSectionProp
         </div>
 
         {/* Discounted Books Grid */}
-        <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
           <AnimatePresence mode="popLayout">
             {displayedDeals.map((book) => {
               const isAdded = addedBookId === book.id;
@@ -293,7 +294,7 @@ export function FlashDealsSection({ books: catalogBooks }: FlashDealsSectionProp
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.25 }}
-                  className="group relative bg-slate-950/60 rounded-2xl border border-white/10 hover:border-primary/40 p-3.5 sm:p-4 flex flex-col justify-between transition-all duration-300 hover:shadow-[0_8px_25px_rgba(0,0,0,0.5)] hover:-translate-y-1 overflow-hidden"
+                  className="group relative bg-slate-950/60 rounded-2xl border border-white/10 hover:border-primary/40 p-2.5 sm:p-4 flex flex-col justify-between transition-all duration-300 hover:shadow-[0_8px_25px_rgba(0,0,0,0.5)] hover:-translate-y-1 overflow-hidden"
                 >
                   {/* Top Discount Badge */}
                   <div className="absolute top-3 left-3 z-20 flex flex-col gap-1 items-start">
@@ -385,6 +386,30 @@ export function FlashDealsSection({ books: catalogBooks }: FlashDealsSectionProp
                 </motion.div>
               );
             })}
+            
+            {remainingDeals > 0 && (
+              <motion.div
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.25 }}
+                className="group relative bg-slate-950/60 rounded-2xl border border-dashed border-white/20 hover:border-amber-400/50 p-2.5 sm:p-4 flex flex-col items-center justify-center min-h-[250px] transition-all duration-300 hover:shadow-[0_8px_25px_rgba(251,191,36,0.15)] hover:-translate-y-1 cursor-pointer overflow-hidden"
+                onClick={() => setVisibleCount(prev => prev + BATCH_SIZE)}
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <Sparkles className="w-6 h-6 text-amber-400" />
+                </div>
+                <h3 className="text-sm font-bold text-white text-center mb-1">More Deals</h3>
+                <p className="text-[10px] sm:text-xs text-white/50 text-center px-2">
+                  Click to reveal <strong className="text-amber-300">+{nextBatchCount}</strong> more discounted books
+                </p>
+                <div className="mt-4 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/70 text-[10px] sm:text-xs font-semibold group-hover:bg-amber-500/10 group-hover:text-amber-300 group-hover:border-amber-500/30 transition-colors">
+                  View Next
+                </div>
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
 
@@ -401,19 +426,6 @@ export function FlashDealsSection({ books: catalogBooks }: FlashDealsSectionProp
           </div>
 
           <div className="flex flex-wrap items-center gap-3 shrink-0">
-            {remainingDeals > 0 && (
-              <button
-                onClick={() => setVisibleCount(prev => prev + BATCH_SIZE)}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-primary hover:bg-primary-light text-white text-xs sm:text-sm font-bold border border-primary/50 transition-all hover:border-primary/70 shadow-[0_0_20px_rgba(139,92,246,0.3)] active:scale-95 cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4 text-amber-300" />
-                <span>
-                  See More Discounted Books (+{nextBatchCount})
-                </span>
-                <ChevronDown className="w-4 h-4" />
-              </button>
-            )}
-
             {visibleCount > INITIAL_COUNT && (
               <button
                 onClick={() => setVisibleCount(INITIAL_COUNT)}

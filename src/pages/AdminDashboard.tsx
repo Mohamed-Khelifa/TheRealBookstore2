@@ -2014,16 +2014,26 @@ function ManageOrders() {
                   <ul className="space-y-3">
                     {order.items?.map((item: any, idx: number) => {
                       const inInventory = item.book_id && inventoryIds.includes(item.book_id);
+                      const isDiscounted = item.is_discounted === true;
+                      
+                      let liClass = 'bg-white/5 border-white/5';
+                      if (isDiscounted) {
+                        liClass = 'bg-red-900/30 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]';
+                      } else if (inInventory) {
+                        liClass = 'bg-primary/20 border-primary/50 shadow-[0_0_15px_rgba(139,92,246,0.5)]';
+                      }
+
                       return (
-                        <li key={idx} className={`flex justify-between items-center p-3 rounded-xl border ${inInventory ? 'bg-primary/20 border-primary/50 shadow-[0_0_15px_rgba(139,92,246,0.5)]' : 'bg-white/5 border-white/5'}`}>
+                        <li key={idx} className={`flex justify-between items-center p-3 rounded-xl border ${liClass}`}>
                           <div className="flex flex-col">
-                            <span className="notranslate text-sm font-medium flex items-center gap-2 text-white">
-                              {inInventory && <Star className="w-4 h-4 text-primary-light" />}
+                            <span className={`notranslate text-sm font-medium flex items-center gap-2 ${isDiscounted ? 'text-red-300' : 'text-white'}`}>
+                              {inInventory && !isDiscounted && <Star className="w-4 h-4 text-primary-light" />}
                               {item.qty}x {item.title}
+                              {isDiscounted && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">DISCOUNTED</span>}
                             </span>
-                            {item.author && <span className={`text-xs ${inInventory ? 'text-primary-light/70' : 'text-white/40'}`}>{item.author}</span>}
+                            {item.author && <span className={`text-xs ${isDiscounted ? 'text-red-300/70' : (inInventory ? 'text-primary-light/70' : 'text-white/40')}`}>{item.author}</span>}
                           </div>
-                          <span className={`font-bold text-sm ${inInventory ? 'text-primary-light' : 'text-white'}`}>{((item.price || 0) * item.qty).toFixed(2)} DA</span>
+                          <span className={`font-bold text-sm ${isDiscounted ? 'text-red-400' : (inInventory ? 'text-primary-light' : 'text-white')}`}>{((item.price || 0) * item.qty).toFixed(2)} DA</span>
                         </li>
                       );
                     })}

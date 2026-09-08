@@ -32,6 +32,7 @@ export interface CartItem {
   price: number;
   qty: number;
   cover_image_url: string;
+  is_discounted?: boolean;
 }
 
 export interface ShippingRate {

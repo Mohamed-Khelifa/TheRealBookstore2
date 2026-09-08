@@ -110,7 +110,7 @@ export default function BookDetail() {
 
   const handleAddSpecialOfferToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
-    addItem({ book_id: book!.id, title: book!.title, author: book!.author, price: book!.price, qty, cover_image_url: book!.cover_image_url });
+    addItem({ book_id: book!.id, title: book!.title, author: book!.author, price: book!.price, qty, cover_image_url: book!.cover_image_url, is_discounted: true });
     setCartStatus('added');
     
     trackAddToCart({ id: book!.id, title: book!.title, price: book!.price }, qty);
