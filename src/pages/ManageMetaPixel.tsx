@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { Save, CheckCircle, RefreshCw, AlertCircle, ShieldCheck, Zap, Send, Activity, Info, Key, Hash } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { trackMetaEvent, DEFAULT_PIXEL_ID } from '../lib/metaPixel';

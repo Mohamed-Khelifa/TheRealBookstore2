@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Flame, Truck, Tag, Sparkles, 
   ShoppingCart, Check, ShieldCheck, ArrowRight, ChevronDown

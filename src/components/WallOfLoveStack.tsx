@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence,PanInfo } from 'motion/react';
+import { motion, AnimatePresence,PanInfo } from 'framer-motion';
 import { Star, Hand, ArrowLeftRight } from 'lucide-react';
 
 export function WallOfLoveStack({ screenshots }: { screenshots: any[] }) {

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, Volume2, VolumeX, Maximize, Sparkles, CheckCircle, ShieldCheck, BookOpen, Truck, Banknote, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 

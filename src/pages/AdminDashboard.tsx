@@ -2,7 +2,7 @@ import { ManageLocations } from '../components/ManageLocations';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, BookOpen, Truck, ShoppingBag, MessageSquare, 
   Plus, Edit, Trash2, Save, X, Check, Search, ExternalLink, Star,

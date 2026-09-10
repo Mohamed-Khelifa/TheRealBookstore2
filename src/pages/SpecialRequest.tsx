@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, MapPin, Phone, Mail, User, Instagram, CheckCircle, ArrowLeft, Truck } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 
 import { trackLead } from '../lib/metaPixel';
 import { DEFAULT_WILAYA_COMMUNES, DEFAULT_STOPDESK_COMMUNES } from '../data/locationData';

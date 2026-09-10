@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { Book } from '../types';
 import { supabase } from '../lib/supabase';
 import { LazyImage } from './ui/lazy-image';

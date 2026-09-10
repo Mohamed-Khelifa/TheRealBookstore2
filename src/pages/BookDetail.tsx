@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Star, ShoppingCart, ArrowLeft, ShieldCheck, Truck, RefreshCw, MessageSquare, Plus, Minus, CheckCircle, Trophy, Sparkles, BookDashed, Bookmark, Tag } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Markdown from 'react-markdown';
 import { Book, Review } from '../types';
 import { useCart } from '../store/useCart';

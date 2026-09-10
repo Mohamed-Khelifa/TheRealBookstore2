@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Truck, CheckCircle, XCircle, Clock, RefreshCw, Copy, 
   Search, ExternalLink, MessageCircle, AlertTriangle, 

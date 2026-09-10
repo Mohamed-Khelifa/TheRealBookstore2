@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Star, ArrowRight, Sparkles, RefreshCw, Search, ShoppingCart, X, CheckCircle, Trophy, Gift } from 'lucide-react';
 import { Book, Quote } from '../types';
 import { useCart } from '../store/useCart';

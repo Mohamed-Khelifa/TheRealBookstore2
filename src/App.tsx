@@ -1,7 +1,7 @@
 import React, { Suspense, useState, useEffect } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { ShoppingCart, User, Menu, X, Search, LogOut, Instagram, Phone, Lock, Trophy, Truck, Sparkles } from 'lucide-react';
-import { motion, AnimatePresence, MotionConfig } from 'motion/react';
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import { useCart } from './store/useCart';
 import { LanguageSwitcher } from './components/LanguageSwitcher';
 import { User as UserType } from './types';

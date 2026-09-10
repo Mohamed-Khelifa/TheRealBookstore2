@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { motion, useMotionValue, useSpring, useTransform } from 'motion/react';
+import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { formatOrderRef } from '../lib/utils';
 import { Book, CheckCircle, Sparkles } from 'lucide-react';
 

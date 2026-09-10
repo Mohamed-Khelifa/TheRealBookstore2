@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Trash2, Plus, Minus, CreditCard, Truck, MapPin, User, CheckCircle, ShoppingCart, Sparkles, Copy, MessageSquare, Trophy, Gift, Instagram, Facebook, Info } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Markdown from 'react-markdown';
 import { useCart } from '../store/useCart';
 import { ShippingRate } from '../types';
@@ -617,11 +617,39 @@ export default function Checkout() {
               }
             }
 
-            // 2. Clear old_price on purchased books so discounts don't persist
-            await supabase
+            // 2. Clear old_price and revert price on explicitly discounted books so discounts don't persist
+            const { data: purchasedBooks } = await supabase
               .from('books')
-              .update({ old_price: 0, updated_at: new Date().toISOString() })
+              .select('id, price, old_price')
               .in('id', purchasedIds);
+
+            if (purchasedBooks) {
+              for (const pb of purchasedBooks) {
+                const oldPrice = Number(pb.old_price) || 0;
+                const currentPrice = Number(pb.price) || 0;
+                
+                if (oldPrice > currentPrice) {
+                  // Revert the price back to the original price (old_price) and clear old_price
+                  await supabase
+                    .from('books')
+                    .update({ 
+                      price: oldPrice,
+                      old_price: 0, 
+                      updated_at: new Date().toISOString() 
+                    })
+                    .eq('id', pb.id);
+                } else if (oldPrice > 0) {
+                  // Just clear old_price if it's set but not greater than current price
+                  await supabase
+                    .from('books')
+                    .update({ 
+                      old_price: 0, 
+                      updated_at: new Date().toISOString() 
+                    })
+                    .eq('id', pb.id);
+                }
+              }
+            }
           }
 
           // 3. Update local storage for immediate UI reactivity

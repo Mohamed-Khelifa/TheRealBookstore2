@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Trophy, Phone, BookOpen, Star, Bookmark, BookDashed, 
   History, Gift, Share2, LogOut, MessageSquare, Loader2, 

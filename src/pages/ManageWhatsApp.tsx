@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { Save, CheckCircle, RefreshCw, MessageCircle, AlertCircle, Info, ChevronDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 

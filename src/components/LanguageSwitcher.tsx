@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Globe, X } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from 'framer-motion';
 
 export function LanguageSwitcher() {
   const [currentLang, setCurrentLang] = useState('en');
