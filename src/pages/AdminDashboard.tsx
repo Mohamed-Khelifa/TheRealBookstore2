@@ -3902,7 +3902,8 @@ function ManageInventory() {
   };
 
   const toggleInventory = async (bookId: string) => {
-    const newInventory = inventoryIds.includes(bookId) 
+    const isRemoving = inventoryIds.includes(bookId);
+    const newInventory = isRemoving
       ? inventoryIds.filter(id => id !== bookId)
       : [...inventoryIds, bookId];
       
@@ -3918,6 +3919,40 @@ function ManageInventory() {
        console.error("Error updating inventory:", error);
        alert("Failed to update inventory.");
        setInventoryIds(inventoryIds); // Revert
+       return;
+    }
+
+    if (isRemoving) {
+      // Revert the explicit discount on the book if one exists so it goes back to original price
+      const { data: bookToRevert } = await supabase
+        .from('books')
+        .select('price, old_price')
+        .eq('id', bookId)
+        .single();
+        
+      if (bookToRevert) {
+        const oldPrice = Number(bookToRevert.old_price) || 0;
+        const currentPrice = Number(bookToRevert.price) || 0;
+        
+        if (oldPrice > currentPrice) {
+          await supabase
+            .from('books')
+            .update({
+              price: oldPrice,
+              old_price: 0,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', bookId);
+        } else if (oldPrice > 0) {
+           await supabase
+             .from('books')
+             .update({
+               old_price: 0,
+               updated_at: new Date().toISOString()
+             })
+             .eq('id', bookId);
+        }
+      }
     }
   };
 

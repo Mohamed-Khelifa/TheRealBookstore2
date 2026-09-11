@@ -79,23 +79,27 @@ export default function BookDetail() {
 
   const cuteNames = ['Happy Panda', 'Cozy Koala', 'Reading Rabbit', 'Bookish Bear', 'Wise Owl', 'Curious Cat', 'Dreamy Deer', 'Little Fox'];
 
-  const regularPrice = (book && book.old_price && Number(book.old_price) > Number(book.price))
-    ? Number(book.old_price)
-    : Number(book?.price || 0);
-
   const handleAddToCart = (e: React.MouseEvent) => {
     if (cartStatus === 'go_to_cart') {
       navigate('/checkout');
       return;
     }
     
-    // Regular purchase uses regular price
-    addItem({ book_id: book!.id, title: book!.title, author: book!.author, price: regularPrice, qty, cover_image_url: book!.cover_image_url });
+    const isDiscounted = book && book.old_price && Number(book.old_price) > Number(book.price);
+    
+    addItem({ 
+      book_id: book!.id, 
+      title: book!.title, 
+      author: book!.author, 
+      price: Number(book!.price), 
+      qty, 
+      cover_image_url: book!.cover_image_url,
+      is_discounted: isDiscounted ? true : undefined
+    });
     setCartStatus('added');
     
-    trackAddToCart({ id: book!.id, title: book!.title, price: regularPrice }, qty);
-    
-    // Dispatch animation event
+    trackAddToCart({ id: book!.id, title: book!.title, price: Number(book!.price) }, qty);
+
     const event = new CustomEvent('add-to-cart-animation', {
       detail: {
         x: e.clientX,
@@ -108,24 +112,6 @@ export default function BookDetail() {
     setTimeout(() => setCartStatus('go_to_cart'), 2000);
   };
 
-  const handleAddSpecialOfferToCart = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    addItem({ book_id: book!.id, title: book!.title, author: book!.author, price: book!.price, qty, cover_image_url: book!.cover_image_url, is_discounted: true });
-    setCartStatus('added');
-    
-    trackAddToCart({ id: book!.id, title: book!.title, price: book!.price }, qty);
-
-    const event = new CustomEvent('add-to-cart-animation', {
-      detail: {
-        x: e.clientX,
-        y: e.clientY,
-        imageUrl: book!.cover_image_url || 'https://picsum.photos/seed/book/600/800'
-      }
-    });
-    window.dispatchEvent(event);
-
-    setTimeout(() => setCartStatus('go_to_cart'), 2000);
-  };
 
   const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -298,28 +284,11 @@ export default function BookDetail() {
 
           <div className="space-y-4">
             <div className="flex items-baseline space-x-4">
-              <div className="text-4xl font-bold text-primary-light">{regularPrice.toFixed(0)} DA</div>
+              <div className="text-4xl font-bold text-primary-light">{Number(book.price).toFixed(0)} DA</div>
+              {Number(book.old_price) > book.price && (
+                <div className="text-xl font-bold text-white/30 line-through decoration-red-500/50">{Number(book.old_price).toFixed(0)} DA</div>
+              )}
             </div>
-
-            {Number(book.old_price) > book.price && (
-              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
-                <div className="flex items-center gap-2 text-amber-300 font-bold text-xs uppercase tracking-wider">
-                  <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>Special Offer Deal Available!</span>
-                </div>
-                <p className="text-white/80 text-xs leading-relaxed">
-                  Get this single copy for only <strong className="text-amber-300 font-bold">{book.price} DA</strong> (Save {Number(book.old_price) - book.price} DA) when ordered as a Special Offer deal!
-                </p>
-                <button
-                  type="button"
-                  onClick={handleAddSpecialOfferToCart}
-                  className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
-                >
-                  <Tag className="w-3.5 h-3.5" />
-                  Claim Special Offer Price ({book.price} DA)
-                </button>
-              </div>
-            )}
           </div>
 
           <div className="prose prose-invert prose-primary max-w-none text-white/60 leading-relaxed">

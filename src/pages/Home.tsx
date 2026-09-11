@@ -346,18 +346,16 @@ export default function Home() {
     e.preventDefault();
     e.stopPropagation();
     
-    // Outside Special Offers area, books use their regular base price
-    const regularPrice = (book.old_price && Number(book.old_price) > Number(book.price)) 
-      ? Number(book.old_price) 
-      : Number(book.price);
+    const isDiscounted = book.old_price && Number(book.old_price) > Number(book.price);
 
     addItem({
       book_id: book.id,
       title: book.title,
       author: book.author,
-      price: regularPrice,
+      price: Number(book.price),
       qty: 1,
-      cover_image_url: book.cover_image_url
+      cover_image_url: book.cover_image_url,
+      is_discounted: isDiscounted ? true : undefined
     });
     
     trackAddToCart({ id: book.id, title: book.title, price: regularPrice }, 1);
@@ -810,9 +808,16 @@ export default function Home() {
                   <p className="text-white/50 text-xs sm:text-sm line-clamp-1">{book.author}</p>
                   <div className="pt-1 sm:pt-2 flex items-center justify-between">
                     <div className="flex flex-col">
-                      <span className="font-bold text-primary-light text-sm sm:text-base">
-                        {((book.old_price && Number(book.old_price) > Number(book.price)) ? Number(book.old_price) : Number(book.price)).toFixed(0)} DA
-                      </span>
+                      <div className="flex items-baseline space-x-2">
+                        <span className="font-bold text-primary-light text-sm sm:text-base">
+                          {Number(book.price).toFixed(0)} DA
+                        </span>
+                        {Number(book.old_price) > book.price && (
+                          <span className="text-[10px] sm:text-xs font-bold text-white/30 line-through decoration-red-500/50">
+                            {Number(book.old_price).toFixed(0)} DA
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center text-yellow-400">
                       <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" />
